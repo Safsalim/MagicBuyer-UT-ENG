@@ -9,6 +9,7 @@ import { pickSeconds } from "./ranges";
 import { getSettings } from "./settings";
 import { recordTransaction, updateState } from "./state";
 import { fetchFutbinSquad } from "../prices/futbinClient";
+import { futbinErrorMessage } from "../prices/futbinErrors";
 import {
   currentPrice,
   getPriceRecord,
@@ -317,7 +318,7 @@ export const loadSolution = async (ctrl, url) => {
       return { ok: false, message: "Paste a futbin.com link (solution / squad page)." };
     }
     if (res.blocked) {
-      return { ok: false, message: "FUTBIN is blocking the request (Cloudflare): open futbin.com in a tab, then try again." };
+      return { ok: false, message: futbinErrorMessage(res) };
     }
     if (res.empty) {
       return { ok: false, message: "No players found on this FUTBIN page (expected a solution or squad link)." };

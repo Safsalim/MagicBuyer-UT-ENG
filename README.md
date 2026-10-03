@@ -49,8 +49,16 @@ every 2 minutes (less often if the price stays the same). FUTBIN requests run on
 with automatic throttling if FUTBIN blocks them. An abnormal price jump is checked a second time before use.
 FUTBIN does not push prices: they are fetched regularly while the card is being tracked.
 
-If FUTBIN returns a Cloudflare verification page, open futbin.com in a tab and complete the verification;
-the “hidden FUTBIN page” fallback (invisible iframe) takes over when direct requests are rejected.
+If FUTBIN opens normally but **Test FUTBIN** fails, the site may be rejecting the userscript's request
+while accepting your normal browser session. Install the updated `dist/fut-auto-buyer.user.js` in
+Violentmonkey or Tampermonkey, reload the EA web app and FUTBIN, and keep a FUTBIN tab open in the
+same browser profile with MagicBuyer enabled on both sites. The **FUTBIN tab** status should say
+**connected**; test again to fetch through that tab. Complete verification only if FUTBIN shows it.
+If the status stays disconnected, check that the extension has site access to FUTBIN and that Chrome
+allows user scripts. A sleeping/discarded tab must be reloaded before it can help.
+
+The optional “hidden FUTBIN page” fallback uses an invisible iframe, which FUTBIN or the browser may
+block. A 403 access denial is reported separately from verification, a 429 rate limit, and a 503 outage.
 
 ## SBCs: FUTBIN solutions
 

@@ -1,18 +1,21 @@
 // ==UserScript==
 // @name        MagicBuyer-UT
-// @version     5.1.1
+// @version     5.1.2
 // @author      AMINE1921
 // @description Sniper / autobuyer for the EA FC 27 Ultimate Team web app
 // @match       https://www.ea.com/*/ea-sports-fc/ultimate-team/web-app*
 // @match       https://www.ea.com/ea-sports-fc/ultimate-team/web-app*
 // @match       https://www.futbin.com/*
+// @match       https://futbin.com/*
 // @namespace   http://tampermonkey.net/
 // @run-at      document-start
 // @sandbox     JavaScript
-// @inject-into page
+// @inject-into auto
 // @grant       GM_xmlhttpRequest
 // @grant       GM_getValue
 // @grant       GM_setValue
+// @grant       GM_addValueChangeListener
+// @grant       GM_removeValueChangeListener
 // @grant       unsafeWindow
 // @connect     ea.com
 // @connect     futbin.com
