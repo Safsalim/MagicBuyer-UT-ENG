@@ -2,14 +2,14 @@ import { pageGlobal, toPageArray } from "./page";
 import { ceilPrice, floorPrice, priceAbove, toInt } from "./prices";
 import { loadJson, loadLegacy, saveJson } from "./storage";
 
-// Un filtre = une cible de snipe (joueur / critères) + ses prix d'achat et de vente.
+// A filter is a snipe target (player / criteria) with buy and sell prices.
 export const DEFAULT_FILTER = {
   id: "",
-  name: "Nouveau filtre",
+  name: "New filter",
   enabled: true,
   type: "player",
   player: null, // { id: baseId, name, rating }
-  definitionId: 0, // version exacte d'une carte (optionnel)
+  definitionId: 0, // exact card version (optional)
   level: "any",
   rarities: [],
   position: "any",
@@ -22,10 +22,10 @@ export const DEFAULT_FILTER = {
   minRating: 0,
   maxRating: 0,
   minBuy: 0,
-  maxBuy: 0, // prix d'achat max (BIN) ; en mode FUTBIN, plafond absolu optionnel
-  priceMode: "fixed", // "fixed" | "futbin" (achat à X % du prix FUTBIN)
+  maxBuy: 0, // max buy price (BIN); optional absolute cap in FUTBIN mode
+  priceMode: "fixed", // fixed | futbin (buy at X% of the FUTBIN price)
   futbinPercent: 90,
-  sellMode: "global", // "global" (onglet Vente) | "fixed" | "futbin"
+  sellMode: "global", // global (Sell tab) | fixed | futbin
   sellPrice: 0,
   sellPercent: "",
   maxBid: 0,
@@ -40,7 +40,7 @@ const makeId = () =>
 export const normalizeFilter = (raw) => {
   const filter = Object.assign({}, DEFAULT_FILTER, raw || {});
   filter.id = filter.id || makeId();
-  filter.name = String(filter.name || "").trim() || "Filtre";
+  filter.name = String(filter.name || "").trim() || "Filter";
   filter.enabled = filter.enabled !== false;
   filter.type = filter.type || "player";
   const player = filter.player;
@@ -56,7 +56,7 @@ export const normalizeFilter = (raw) => {
   filter.rarities = (Array.isArray(filter.rarities) ? filter.rarities : [])
     .map((value) => parseInt(value, 10))
     .filter((value) => Number.isFinite(value) && value >= 0);
-  // Zones EA FC 27 : 130 défense, 131 milieu, 132 attaque (-1 = aucune).
+  // EA FC 27 zones: 130 defense, 131 midfield, 132 attack (-1 = any).
   ["nation", "league", "club", "playStyle", "zone"].forEach((key) => {
     const n = parseInt(filter[key], 10);
     filter[key] = Number.isFinite(n) && n > 0 ? n : -1;
@@ -72,7 +72,7 @@ export const normalizeFilter = (raw) => {
   filter.priceMode = filter.priceMode === "futbin" ? "futbin" : "fixed";
   const percent = parseFloat(filter.futbinPercent);
   filter.futbinPercent = Number.isFinite(percent) ? Math.min(150, Math.max(10, percent)) : 90;
-  // Filtres enregistrés avant les modes de revente : un prix de revente saisi reste prioritaire.
+  // Filters saved before sell modes: an entered sell price still takes priority.
   const wantedSell = raw && raw.sellMode;
   filter.sellMode = ["global", "fixed", "futbin"].includes(wantedSell)
     ? wantedSell
@@ -83,11 +83,11 @@ export const normalizeFilter = (raw) => {
   return filter;
 };
 
-// Carte dont le prix FUTBIN sert de référence au filtre (version exacte, sinon carte de base).
+// Card whose FUTBIN price is the filter's reference (exact version, otherwise base card).
 export const futbinKeyForFilter = (filter) =>
   (filter && (filter.definitionId || (filter.player && filter.player.id))) || 0;
 
-// Migration des filtres de la v4 (localStorage "mbSavedFilters").
+// Migrate v4 filters (localStorage mbSavedFilters).
 const migrateLegacy = () => {
   const legacy = loadLegacy("mbSavedFilters");
   if (!Array.isArray(legacy) || !legacy.length) {
@@ -134,7 +134,7 @@ const load = () => {
     };
   }
   const migrated = migrateLegacy();
-  const list = migrated.length ? migrated : [normalizeFilter({ name: "Mon filtre" })];
+  const list = migrated.length ? migrated : [normalizeFilter({ name: "My filter" })];
   return {
     list,
     activeId: list[0].id,
@@ -196,13 +196,13 @@ export const duplicateFilter = (id) => {
   if (!source) {
     return null;
   }
-  return addFilter(Object.assign({}, source, { name: `${source.name} (copie)` }));
+  return addFilter(Object.assign({}, source, { name: `${source.name} (copy)` }));
 };
 
 export const removeFilter = (id) => {
   let list = data.list.filter((filter) => filter.id !== id);
   if (!list.length) {
-    list = [normalizeFilter({ name: "Mon filtre" })];
+    list = [normalizeFilter({ name: "My filter" })];
   }
   const activeId = list.some((filter) => filter.id === data.activeId)
     ? data.activeId
@@ -225,7 +225,7 @@ export const setLastEaSearch = (snapshot) => {
 
 export const getLastEaSearch = () => data.lastEaSearch;
 
-// Filtres utilisés par le bot : la rotation (filtres cochés) ou le filtre actif seul.
+// Filters used by the bot: rotation (checked filters) or only the active filter.
 export const runnableFilters = () => {
   if (data.rotation.enabled) {
     const enabled = data.list.filter((filter) => filter.enabled);
@@ -237,8 +237,8 @@ export const runnableFilters = () => {
   return active ? [active] : [];
 };
 
-// Une cible = un joueur, une version exacte ou au moins un critère restrictif.
-// Un prix seul ne suffit pas (sinon le bot achèterait n'importe quel joueur sous ce prix).
+// A target is a player, an exact version, or at least one restrictive criterion.
+// A price alone is not enough (otherwise the bot would buy any player below that price).
 export const filterHasTarget = (filter) =>
   !!(
     filter &&
@@ -258,38 +258,38 @@ export const filterHasTarget = (filter) =>
 
 export const describeFilter = (filter) => {
   if (!filter) {
-    return "Aucun filtre";
+    return "No filter";
   }
   const parts = [];
   if (filter.player) {
     parts.push(
-      `${filter.player.name || "Joueur"}${filter.player.rating ? ` ${filter.player.rating}` : ""}`
+      `${filter.player.name || "Player"}${filter.player.rating ? ` ${filter.player.rating}` : ""}`
     );
   } else if (filter.definitionId) {
-    parts.push(`Carte #${filter.definitionId}`);
+    parts.push(`Card #${filter.definitionId}`);
   } else {
-    parts.push("Tous les joueurs");
+    parts.push("All players");
   }
-  const levels = { bronze: "Bronze", silver: "Argent", gold: "Or", SP: "Spéciale" };
+  const levels = { bronze: "Bronze", silver: "Silver", gold: "Gold", SP: "Special" };
   if (levels[filter.level]) {
     parts.push(levels[filter.level]);
   }
   if (filter.rarities.length) {
-    parts.push(`rareté ${filter.rarities.join("/")}`);
+    parts.push(`rarity ${filter.rarities.join("/")}`);
   }
   if (filter.position && filter.position !== "any") {
     parts.push(filter.position);
   }
   if (filter.minRating || filter.maxRating) {
-    parts.push(`note ${filter.minRating || "…"}–${filter.maxRating || "…"}`);
+    parts.push(`rating ${filter.minRating || "…"}–${filter.maxRating || "…"}`);
   }
   if (filter.priceMode === "futbin") {
-    parts.push(`achat ≤ ${filter.futbinPercent} % FUTBIN`);
+    parts.push(`buy ≤ ${filter.futbinPercent} % FUTBIN`);
   }
   return parts.join(" · ");
 };
 
-// Critères "vides" hors web app (tests) : mêmes valeurs par défaut que UTSearchCriteriaDTO.
+// Empty criteria outside the web app (tests): same defaults as UTSearchCriteriaDTO.
 const plainCriteria = () => ({
   type: "any",
   category: "any",
@@ -315,8 +315,8 @@ const plainCriteria = () => ({
   icontraits: "any",
 });
 
-// Construit un vrai UTSearchCriteriaDTO FC 27. Attention : le setter `type` remet
-// nation/subtypes à zéro, il doit donc être assigné en premier.
+// Build a real FC 27 UTSearchCriteriaDTO. Note: the type setter resets
+// nation/subtypes, so it must be assigned first.
 export const buildCriteria = (filter, prices = {}) => {
   const Dto = pageGlobal("UTSearchCriteriaDTO");
   let criteria;
@@ -352,7 +352,7 @@ export const buildCriteria = (filter, prices = {}) => {
   if (filter.playStyle > 0) {
     criteria.playStyle = filter.playStyle;
   }
-  // defId (version exacte) est prioritaire côté EA sur maskedDefId (toutes versions).
+  // EA prioritizes defId (exact version) over maskedDefId (all versions).
   if (filter.definitionId > 0) {
     criteria.defId = toPageArray([filter.definitionId]);
   } else if (filter.player && filter.player.id > 0) {
@@ -362,7 +362,7 @@ export const buildCriteria = (filter, prices = {}) => {
   const maxBuy = toInt(prices.maxBuy != null ? prices.maxBuy : filter.maxBuy);
   const minBid = toInt(prices.minBid);
   const maxBid = toInt(prices.maxBid);
-  // Max arrondis vers le bas, min vers le haut : jamais au-delà de ce qui a été saisi.
+  // Round maximums down and minimums up: never exceed the entered values.
   if (minBuy) {
     criteria.minBuy = ceilPrice(minBuy);
   }
@@ -378,9 +378,9 @@ export const buildCriteria = (filter, prices = {}) => {
   return criteria;
 };
 
-// Anti-cache EA : chaque recherche doit avoir une URL différente pour obtenir des
-// résultats frais. Le mode "auto" fait varier l'enchère max AU-DESSUS du prix d'achat
-// max : aucune annonce achetable n'est jamais exclue (enchère < BIN ≤ prix max).
+// EA cache busting: every search must have a different URL to get
+// fresh results. Auto mode varies the max bid ABOVE the max buy
+// price: no purchasable listing is excluded (bid < BIN ≤ max price).
 export const cacheBusterPrices = (mode, step, { maxBuy, minBuy, maxBid, cap }) => {
   const out = { minBuy, maxBuy, maxBid, minBid: 0 };
   const variants = 20;
@@ -424,7 +424,7 @@ export const cacheBusterPrices = (mode, step, { maxBuy, minBuy, maxBid, cap }) =
   return out;
 };
 
-// Snapshot sérialisable d'une recherche du marché EA (import depuis l'interface native).
+// Serializable snapshot of an EA market search (import from the native interface).
 export const snapshotFromEaCriteria = (criteria, playerData) => {
   if (!criteria) {
     return null;

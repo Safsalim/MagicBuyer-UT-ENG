@@ -15,7 +15,7 @@ export const fromHtml = (html) => {
   return template.content.firstElementChild;
 };
 
-// Ne touche au DOM que si le contenu change (évite les boucles de mutations).
+// Touch the DOM only when content changes (avoid mutation loops).
 export const setText = (el, text) => {
   if (el && el.textContent !== String(text)) {
     el.textContent = String(text);
@@ -44,7 +44,7 @@ export const debounce = (fn, wait) => {
 };
 
 export const formatTime = (timestamp) =>
-  new Date(timestamp).toLocaleTimeString("fr-FR", {
+  new Date(timestamp).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

@@ -18,10 +18,10 @@ import { onPriceUpdate } from "../prices/priceService";
 import { escapeHtml, qs } from "./dom";
 import { injectStyles } from "./panel";
 
-// Écran d'équipe d'un DCE : bouton « Solution FUTBIN » → coller le lien, aperçu des joueurs
-// (club / stockage / à acheter), placement dans l'équipe, achat des manquants au prix FUTBIN.
-// Seules deux méthodes EA sans appel à superclass() sont interceptées (initWithSBCSet et
-// getNavigationTitle) : les autres méthodes de ce contrôleur ne supportent pas d'être enveloppées.
+// SBC squad screen: FUTBIN Solution button → paste link, preview players
+// (club / storage / to buy), place them in the squad, buy missing players at the FUTBIN price.
+// Intercept only two EA methods without superclass() calls (initWithSBCSet and
+// getNavigationTitle): the controller's other methods cannot be wrapped.
 
 let activeCtrl = null;
 let hooked = false;
@@ -35,11 +35,11 @@ let repaintTimer = null;
 const lastUrls = new Map();
 
 const STATE_LABEL = {
-  owned: "Dans ton club",
-  missing: "À acheter",
-  searching: "Recherche…",
-  bought: "Acheté",
-  failed: "Échec",
+  owned: "In your club",
+  missing: "To buy",
+  searching: "Searching…",
+  bought: "Purchased",
+  failed: "Failed",
 };
 
 const ctrlAlive = (ctrl) => {
@@ -90,7 +90,7 @@ export const hookSbc = () => {
   return true;
 };
 
-// --------------------------------------------------------------- bouton flottant
+// --------------------------------------------------------------- floating button
 
 const ensureFab = () => {
   if (fab && fab.isConnected) {
@@ -99,8 +99,8 @@ const ensureFab = () => {
   fab = document.createElement("button");
   fab.type = "button";
   fab.id = "mb-sbc-fab";
-  fab.textContent = "⚡ Solution FUTBIN";
-  fab.title = "Importer une solution FUTBIN dans ce défi (MagicBuyer)";
+  fab.textContent = "⚡ FUTBIN Solution";
+  fab.title = "Import a FUTBIN solution into this challenge (MagicBuyer)";
   ["pointerdown", "mousedown", "touchstart", "touchend", "mouseup", "pointerup"].forEach((type) =>
     fab.addEventListener(type, (event) => event.stopPropagation())
   );
@@ -130,25 +130,25 @@ export const tickSbc = () => {
   button.hidden = !visible || !!modal;
 };
 
-// -------------------------------------------------------------------- fenêtre
+// -------------------------------------------------------------------- dialog
 
 const modalHtml = (title) => `
   <div class="mb-sbc-backdrop" data-sbc-close></div>
-  <div class="mb-sbc-dialog" role="dialog" aria-modal="true" aria-label="Solution FUTBIN">
+  <div class="mb-sbc-dialog" role="dialog" aria-modal="true" aria-label="FUTBIN Solution">
     <header class="mb-sbc-head">
-      <div><strong>⚡ Solution FUTBIN</strong><small>${escapeHtml(title || "Défi")}</small></div>
-      <button type="button" class="mb-sbc-x" data-sbc-close aria-label="Fermer">×</button>
+      <div><strong>⚡ FUTBIN Solution</strong><small>${escapeHtml(title || "Challenge")}</small></div>
+      <button type="button" class="mb-sbc-x" data-sbc-close aria-label="Close">×</button>
     </header>
     <div class="mb-sbc-url">
-      <input type="url" data-sbc-url placeholder="https://www.futbin.com/27/squad/…" autocomplete="off" spellcheck="false" aria-label="Lien FUTBIN" />
-      <button type="button" class="mb-sbc-btn is-primary" data-sbc-load>Charger</button>
+      <input type="url" data-sbc-url placeholder="https://www.futbin.com/27/squad/…" autocomplete="off" spellcheck="false" aria-label="FUTBIN link" />
+      <button type="button" class="mb-sbc-btn is-primary" data-sbc-load>Load</button>
     </div>
-    <p class="mb-sbc-status" data-sbc-status>Colle le lien FUTBIN d'une solution de ce défi (page de l'équipe), puis « Charger ».</p>
+    <p class="mb-sbc-status" data-sbc-status>Paste the FUTBIN link to a solution for this challenge (squad page), then click “Load”.</p>
     <div class="mb-sbc-body" data-sbc-body></div>
     <footer class="mb-sbc-foot">
       <span class="mb-sbc-summary" data-sbc-summary></span>
-      <button type="button" class="mb-sbc-btn" data-sbc-apply disabled>Placer dans l'équipe</button>
-      <button type="button" class="mb-sbc-btn is-primary" data-sbc-buy disabled>Acheter les manquants</button>
+      <button type="button" class="mb-sbc-btn" data-sbc-apply disabled>Place in squad</button>
+      <button type="button" class="mb-sbc-btn is-primary" data-sbc-buy disabled>Buy missing players</button>
       <button type="button" class="mb-sbc-btn is-danger" data-sbc-stop hidden>Stop</button>
     </footer>
   </div>`;
@@ -167,7 +167,7 @@ const rowHtml = (entry, index) => {
   const price = entryPrice(entry);
   const auto = maxPriceFor(Object.assign({}, entry, { manual: false }));
   const player = entry.player;
-  const link = player.url ? ` <a href="${escapeHtml(player.url)}" target="_blank" rel="noopener" title="Page FUTBIN">↗</a>` : "";
+  const link = player.url ? ` <a href="${escapeHtml(player.url)}" target="_blank" rel="noopener" title="FUTBIN page">↗</a>` : "";
   return `<tr data-sbc-row="${index}" class="is-${entry.state}">
     <td class="mb-sbc-pos">${escapeHtml(entry.slotLabel || player.position || "—")}</td>
     <td><b>${escapeHtml(player.name || `#${player.eaId}`)}</b> <span class="mb-sbc-rating">${player.rating || ""}</span>${link}
@@ -176,7 +176,7 @@ const rowHtml = (entry, index) => {
     <td class="is-num"><span data-sbc-price>${price ? formatCoins(price) : "—"}</span><small data-sbc-age>${escapeHtml(priceStatus(entry))}</small></td>
     <td class="is-num">${
       editable
-        ? `<input class="mb-sbc-max" data-sbc-max="${index}" inputmode="text" autocomplete="off" value="${entry.manual ? entry.maxPrice : ""}" placeholder="${auto ? auto : "à saisir"}" aria-label="Prix max pour ${escapeHtml(player.name)}" />`
+        ? `<input class="mb-sbc-max" data-sbc-max="${index}" inputmode="text" autocomplete="off" value="${entry.manual ? entry.maxPrice : ""}" placeholder="${auto ? auto : "enter price"}" aria-label="Max price for ${escapeHtml(player.name)}" />`
         : entry.boughtPrice
         ? formatCoins(entry.boughtPrice)
         : ""
@@ -196,18 +196,18 @@ const renderTable = () => {
   const formation = session.formation
     ? `Formation ${escapeHtml(session.futbinFormation || formationLabel(session.formation))} → ${escapeHtml(formationLabel(session.formation))}`
     : session.futbinFormation
-    ? `Formation FUTBIN ${escapeHtml(session.futbinFormation)} introuvable : formation actuelle conservée`
-    : "Formation actuelle conservée";
-  const title = session.challengeName ? `Solution FUTBIN « ${escapeHtml(session.challengeName)} » · ` : "";
-  body.innerHTML = `<p class="mb-sbc-meta">${title}${formation} · ${session.entries.length} joueur(s) · lu via ${session.via === "iframe" ? "page FUTBIN cachée" : "requête directe"}</p>
+    ? `FUTBIN formation ${escapeHtml(session.futbinFormation)} not found: keeping current formation`
+    : "Keeping current formation";
+  const title = session.challengeName ? `FUTBIN Solution “${escapeHtml(session.challengeName)}” · ` : "";
+  body.innerHTML = `<p class="mb-sbc-meta">${title}${formation} · ${session.entries.length} player(s) · fetched via ${session.via === "iframe" ? "hidden FUTBIN page" : "direct request"}</p>
     <table class="mb-sbc-table">
-      <thead><tr><th>Poste</th><th>Joueur</th><th>Statut</th><th class="is-num">FUTBIN</th><th class="is-num">Max</th></tr></thead>
+      <thead><tr><th>Position</th><th>Player</th><th>Status</th><th class="is-num">FUTBIN</th><th class="is-num">Max</th></tr></thead>
       <tbody>${session.entries.map(rowHtml).join("")}</tbody>
     </table>`;
   paintSummary();
 };
 
-// Mise à jour d'une ligne sans toucher au champ en cours de saisie.
+// Update a row without touching the field currently being edited.
 const paintRow = (index) => {
   if (!modal || !session) {
     return;
@@ -234,7 +234,7 @@ const paintRow = (index) => {
   qs(row, "[data-sbc-age]").textContent = priceStatus(entry);
   if (input && document.activeElement !== input) {
     const auto = maxPriceFor(Object.assign({}, entry, { manual: false }));
-    input.placeholder = auto ? String(auto) : "à saisir";
+    input.placeholder = auto ? String(auto) : "enter price";
   }
   paintSummary();
 };
@@ -255,9 +255,9 @@ const paintSummary = () => {
   }
   const summary = sessionSummary(session);
   summaryEl.innerHTML =
-    `<b>${summary.placed}/${summary.total}</b> disponibles · <b>${summary.missing}</b> à acheter` +
-    (summary.missing ? ` · budget max <b>${formatCoins(summary.budget)}</b>${summary.unknown ? ` (+${summary.unknown} sans prix)` : ""}` : "") +
-    (summary.coins ? ` · tu as ${formatCoins(summary.coins)}` : "");
+    `<b>${summary.placed}/${summary.total}</b> available · <b>${summary.missing}</b> to buy` +
+    (summary.missing ? ` · max budget <b>${formatCoins(summary.budget)}</b>${summary.unknown ? ` (+${summary.unknown} without a price)` : ""}` : "") +
+    (summary.coins ? ` · you have ${formatCoins(summary.coins)}` : "");
   summaryEl.classList.toggle("is-short", !!(summary.coins && summary.budget > summary.coins));
   const busy = !!running;
   applyBtn.disabled = busy;
@@ -280,7 +280,7 @@ const schedulePaint = () => {
 
 const closeModal = () => {
   if (running) {
-    setStatus("Achat en cours : clique sur Stop avant de fermer.", "warn");
+    setStatus("Purchasing in progress: click Stop before closing.", "warn");
     return;
   }
   if (modal) {
@@ -343,7 +343,7 @@ const load = async () => {
   }
   const url = qs(modal, "[data-sbc-url]").value.trim();
   if (!url) {
-    setStatus("Colle d'abord un lien FUTBIN.", "warn");
+    setStatus("Paste a FUTBIN link first.", "warn");
     return;
   }
   const ctrl = modal.__ctrl;
@@ -351,7 +351,7 @@ const load = async () => {
   releaseSession(session);
   session = null;
   renderTable();
-  setStatus("Lecture de la page FUTBIN et recherche dans ton club…");
+  setStatus("Fetching the FUTBIN page and searching your club…");
   qs(modal, "[data-sbc-load]").disabled = true;
   loading = true;
   try {
@@ -369,19 +369,19 @@ const load = async () => {
     session = result.session;
     renderTable();
     if (session.ownedErrors.length) {
-      setStatus(`Recherche dans le club incomplète (${session.ownedErrors[0].label}) : vérifie la liste puis clique sur « Placer dans l'équipe ».`, "warn");
+      setStatus(`Club search incomplete (${session.ownedErrors[0].label}): check the list, then click “Place in squad”.`, "warn");
       return;
     }
-    // Solution lue dans le JSON de FUTBIN : fiable, l'équipe est remplie tout de suite. Lecture du HTML
-    // (secours) : seulement si toute l'équipe a été reconnue.
+    // Solution read from FUTBIN JSON: reliable, fill the squad immediately. HTML parsing
+    // (fallback): only if the entire squad was recognized.
     const open = (session.slots || []).filter((slot) => !slot.brick).length;
     const complete = session.source === "json" || session.entries.length >= Math.min(11, open || 11);
     if (!complete) {
-      setStatus(`Seulement ${session.entries.length} joueur(s) lus sur la page FUTBIN : vérifie la liste puis clique sur « Placer dans l'équipe ».`, "warn");
+      setStatus(`Only ${session.entries.length} player(s) found on the FUTBIN page: check the list, then click “Place in squad”.`, "warn");
       return;
     }
-    // Solution complète : l'équipe du défi est remplie tout de suite avec les joueurs du club.
-    setStatus("Placement des joueurs de ton club dans l'équipe…");
+    // Complete solution: fill the challenge squad immediately with club players.
+    setStatus("Placing your club players in the squad…");
     const placed = await applySession(session);
     if (!modal) {
       return;
@@ -393,13 +393,13 @@ const load = async () => {
     } else {
       setStatus(
         summary.missing
-          ? `Équipe remplie : ${summary.placed}/${summary.total} joueurs placés. Vérifie les prix max des ${summary.missing} manquant(s) puis « Acheter les manquants ».`
-          : "Équipe remplie avec tes joueurs. Vérifie les exigences puis envoie le défi toi-même.",
+          ? `Squad filled: ${summary.placed}/${summary.total} players placed. Check the max prices for the ${summary.missing} missing player(s), then click “Buy missing players”.`
+          : "Squad filled with your players. Check the requirements, then submit the challenge yourself.",
         "ok"
       );
     }
   } catch (e) {
-    setStatus(`Erreur : ${errorMessage(e)}`, "error");
+    setStatus(`Error: ${errorMessage(e)}`, "error");
   } finally {
     loading = false;
     if (modal) {
@@ -413,13 +413,13 @@ const apply = async () => {
   if (!session || running) {
     return;
   }
-  setStatus("Placement des joueurs et enregistrement du défi…");
+  setStatus("Placing players and saving the challenge…");
   const result = await applySession(session);
   if (!modal) {
     return;
   }
   renderTable();
-  setStatus(result.ok ? "Équipe enregistrée. Vérifie les exigences puis envoie le défi toi-même." : result.message, result.ok ? "ok" : "error");
+  setStatus(result.ok ? "Squad saved. Check the requirements, then submit the challenge yourself." : result.message, result.ok ? "ok" : "error");
 };
 
 const buy = async () => {
@@ -427,31 +427,31 @@ const buy = async () => {
     return;
   }
   if (isRunning()) {
-    setStatus("Arrête d'abord le bot (panneau MagicBuyer) : un seul automatisme à la fois.", "warn");
+    setStatus("Stop the bot first (MagicBuyer panel): only one automated task at a time.", "warn");
     return;
   }
   const summary = sessionSummary(session);
   if (summary.unknown) {
-    setStatus("Certains manquants n'ont pas de prix FUTBIN en direct : indique un prix max pour chacun (champ « à saisir »).", "warn");
+    setStatus("Some missing players have no live FUTBIN price: enter a max price for each (“enter price” field).", "warn");
     return;
   }
   if (summary.coins && summary.budget > summary.coins) {
-    setStatus(`Budget max ${formatCoins(summary.budget)} supérieur à tes coins (${formatCoins(summary.coins)}) : baisse des prix max ou libère des coins.`, "warn");
+    setStatus(`Max budget ${formatCoins(summary.budget)} exceeds your coins (${formatCoins(summary.coins)}): lower some max prices or free up coins.`, "warn");
     return;
   }
-  const task = beginTask("achat DCE");
+  const task = beginTask("SBC purchase");
   if (!task) {
     const other = currentTask();
-    setStatus(`Une autre tâche est en cours (${other ? other.label : "?"}).`, "warn");
+    setStatus(`Another task is in progress (${other ? other.label : "?"}).`, "warn");
     return;
   }
   running = task;
   paintSummary();
-  setStatus("Achat des joueurs manquants… (tu peux arrêter à tout moment)");
-  log.info(`DCE : achat de ${summary.missing} joueur(s) manquant(s), budget max ${formatCoins(summary.budget)}.`);
+  setStatus("Buying missing players… (you can stop at any time)");
+  log.info(`SBC: buying ${summary.missing} missing player(s), max budget ${formatCoins(summary.budget)}.`);
   let report;
   try {
-    // Le placement déjà possédé est fait d'abord : les achats complètent l'équipe.
+    // Place already owned players first: purchases complete the squad.
     await applySession(session);
     renderTable();
     report = await buyMissing(session, {
@@ -469,12 +469,12 @@ const buy = async () => {
   }
   renderTable();
   const text =
-    `${report.bought} acheté(s) pour ${formatCoins(report.spent)}` +
-    (report.failed ? ` · ${report.failed} non trouvé(s) sous ton prix max` : "") +
-    (report.stopped ? ` · arrêt : ${report.stopped}` : "") +
-    ". Vérifie l'équipe puis envoie le défi toi-même.";
+    `${report.bought} purchased for ${formatCoins(report.spent)}` +
+    (report.failed ? ` · ${report.failed} not found below your max price` : "") +
+    (report.stopped ? ` · stopped: ${report.stopped}` : "") +
+    ". Check the squad, then submit the challenge yourself.";
   setStatus(text, report.stopped || report.failed ? "warn" : "ok");
-  log.info(`DCE terminé : ${text}`);
+  log.info(`SBC completed: ${text}`);
 };
 
 function onClick(event) {
@@ -489,7 +489,7 @@ function onClick(event) {
     buy();
   } else if (target.closest("[data-sbc-stop]")) {
     cancelTask();
-    setStatus("Arrêt demandé : fin de la requête en cours…", "warn");
+    setStatus("Stop requested: finishing the current request…", "warn");
   }
 }
 

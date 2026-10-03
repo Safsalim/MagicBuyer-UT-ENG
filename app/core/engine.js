@@ -41,9 +41,9 @@ const RELIST_MIN_GAP = 5 * 60 * 1000;
 const CLEAR_MIN_GAP = 60 * 1000;
 const REFERENCE_WAIT_MAX = 2 * 60 * 1000;
 const MAX_SELL_DEFERRALS = 6;
-// Attente maximale du prix FUTBIN d'une carte achetée avant de l'envoyer non listée en liste des transferts.
+// Maximum wait for a purchased card's FUTBIN price before sending it to the transfer list without listing.
 const SELL_PRICE_WAIT = 90 * 1000;
-// Âge maximal d'un prix FUTBIN utilisable : achat 5 min (rafraîchi toutes les ≤ 2 min), vente 10 min.
+// Maximum usable FUTBIN price age: 5 minutes for purchases (refreshed every ≤ 2 minutes), 10 minutes for sales.
 const BUY_PRICE_MAX_AGE = 5 * 60 * 1000;
 const SELL_PRICE_MAX_AGE = 10 * 60 * 1000;
 const RELIST_RETRY = 90 * 1000;
@@ -55,10 +55,10 @@ let run = null;
 export const isRunning = () => !!run;
 export const isPaused = () => !!(run && run.paused);
 export const isStopping = () => !!(run && run.stopping);
-// Mises en vente des cartes achetées juste avant l'arrêt (Stop les interrompt).
+// Listings for cards purchased just before stopping (Stop interrupts them).
 export const isFinalizing = () => !!(run && run.finalToken && !run.finalToken.cancelled);
 
-// ------------------------------------------------------------ utilitaires
+// ------------------------------------------------------------ utilities
 
 const safeCall = (target, method) => {
   try {
@@ -68,7 +68,7 @@ const safeCall = (target, method) => {
   }
 };
 
-// Attente interrompue par Stop (jeton du run) ou par Pause/Reprise (jeton ponctuel).
+// Wait interrupted by Stop (run token) or Pause/Resume (one-off token).
 const idle = async (ctx, ms) => {
   if (ctx.token.cancelled) {
     return false;
@@ -85,8 +85,8 @@ const idle = async (ctx, ms) => {
   return completed && !ctx.token.cancelled;
 };
 
-// "Pas avant" : prochaine recherche autorisée. Une pause manuelle ne raccourcit jamais
-// une attente (temps entre recherches, pause automatique ou pause de sécurité).
+// Not before: next allowed search time. A manual pause never shortens
+// a wait (search delay, automatic pause, or safety pause).
 const setNotBefore = (ctx, at, kind) => {
   const now = Date.now();
   if (at >= ctx.notBefore || ctx.notBefore <= now) {
@@ -106,8 +106,8 @@ const futbinHint = (filter) => ({
   rating: filter.player ? filter.player.rating : 0,
 });
 
-// Prix d'achat max effectif : fixe, ou X % du prix FUTBIN (plafonné par le prix fixe s'il existe).
-// En mode FUTBIN, sans prix récent (< 5 min) le filtre attend : jamais d'achat sur un prix périmé.
+// Effective max buy price: fixed, or X% of FUTBIN price (capped by the fixed price when set).
+// In FUTBIN mode, the filter waits without a recent price (< 5 minutes): never buy using an outdated price.
 const effectiveMaxBuy = (filter) => {
   const cap = toInt(filter.maxBuy);
   if (filter.priceMode !== "futbin") {
@@ -125,7 +125,7 @@ const effectiveMaxBuy = (filter) => {
 const referencePending = (filter) =>
   filter.priceMode === "futbin" && !!futbinKeyForFilter(filter) && !effectiveMaxBuy(filter);
 
-// Suivi "prioritaire" (≤ 2 min) des prix FUTBIN utilisés par le bot pendant qu'il tourne.
+// Priority tracking (≤ 2 minutes) of FUTBIN prices used by the running bot.
 const trackHot = (ctx, key, hint) => {
   if (!key || ctx.tracked.has(key)) {
     return;
@@ -142,7 +142,7 @@ const releaseTracking = (ctx) => {
   }
 };
 
-// Journal des variations de prix FUTBIN des cibles du bot (achat max recalculé à chaque mise à jour).
+// Log changes to target FUTBIN prices (max buy price recalculated on each update).
 const watchFutbinPrices = (ctx) => {
   const lastPrices = new Map();
   ctx.unwatchPrices = onPriceUpdate((definitionId, record) => {
@@ -158,7 +158,7 @@ const watchFutbinPrices = (ctx) => {
     if (record.suspect && !ctx.warned.has(`suspect:${definitionId}:${record.suspect.price}`)) {
       ctx.warned.add(`suspect:${definitionId}:${record.suspect.price}`);
       log.warn(
-        `Prix FUTBIN ${filter.name} : saut anormal à ${formatCoins(record.suspect.price)}, ancien prix gardé en attendant une confirmation.`
+        `FUTBIN price ${filter.name} : abnormal jump to ${formatCoins(record.suspect.price)}, keeping the previous price pending confirmation.`
       );
       return;
     }
@@ -166,7 +166,7 @@ const watchFutbinPrices = (ctx) => {
     lastPrices.set(definitionId, record.price);
     if (previous && previous !== record.price && record.price) {
       log.info(
-        `Prix FUTBIN ${filter.name} : ${formatCoins(previous)} → ${formatCoins(record.price)} · achat max ${formatCoins(effectiveMaxBuy(filter))}.`
+        `FUTBIN price ${filter.name} : ${formatCoins(previous)} → ${formatCoins(record.price)} · max buy ${formatCoins(effectiveMaxBuy(filter))}.`
       );
     }
   });
@@ -187,26 +187,26 @@ const purchaseLimitReached = (settings) => {
   return !!(maxBuys && getState().stats.won >= maxBuys);
 };
 
-// --------------------------------------------------------------- démarrage
+// --------------------------------------------------------------- startup
 
 const preflight = () => {
   if (!isAppReady()) {
-    return "Le web app EA n'est pas encore prêt : attends la page d'accueil puis réessaie.";
+    return "The EA web app is not ready yet: wait for the home screen, then try again.";
   }
   if (!getUser()) {
-    return "Connecte-toi au web app EA avant de démarrer.";
+    return "Log in to the EA web app before starting.";
   }
   const task = currentTask();
   if (task) {
-    return `Une tâche est en cours (${task.label}) : attends la fin ou arrête-la avant de démarrer le bot.`;
+    return `A task is in progress (${task.label}): wait for it to finish or stop it before starting the bot.`;
   }
   const settings = getSettings();
   const filters = runnableFilters().filter(filterHasTarget);
   if (!filters.length) {
-    return "Choisis un joueur (ou au moins un critère : qualité, rareté, note…) dans l'onglet Cible.";
+    return "Choose a player (or at least one criterion: quality, rarity, rating…) in the Target tab.";
   }
   if (filters.some((filter) => filter.priceMode === "futbin" && !futbinKeyForFilter(filter))) {
-    return "Mode « % du prix FUTBIN » : choisis un joueur ou un ID de version exacte (le prix FUTBIN est celui de cette carte).";
+    return "In “% of FUTBIN price” mode, choose a player or an exact version ID (the FUTBIN price belongs to that card).";
   }
   const usable = filters.filter(
     (filter) =>
@@ -214,10 +214,10 @@ const preflight = () => {
       (settings.bid.enabled && filter.maxBid)
   );
   if (!usable.length) {
-    return "Indique un « Prix d'achat max » ou choisis le mode « % du prix FUTBIN » (avec un joueur) pour ta cible.";
+    return "Enter a “Max buy price” or select “% of FUTBIN price” mode (with a player) for your target.";
   }
   if (!parseRange(settings.timing.wait, "S")) {
-    return "Le temps entre recherches est invalide (exemple : 5-9).";
+    return "The delay between searches is invalid (example: 5-9).";
   }
   return null;
 };
@@ -225,7 +225,7 @@ const preflight = () => {
 export const startBot = () => {
   if (run) {
     if (run.stopping) {
-      log.warn("Arrêt en cours (mises en vente des dernières cartes) : attends la fin ou clique sur Stop.");
+      log.warn("Stopping (listing the last purchased cards): wait for completion or click Stop.");
       return false;
     }
     if (run.paused) {
@@ -301,31 +301,31 @@ export const startBot = () => {
   }
   const filters = runnableFilters().filter(filterHasTarget);
   log.info(
-    `Bot démarré · ${filters.length > 1 ? `${filters.length} filtres en rotation` : describeFilter(filters[0])}` +
-      ` · attente ${settings.timing.wait} s` +
-      (ctx.pauseAfter ? ` · pause toutes les ~${ctx.pauseAfter} recherches` : "") +
-      (ctx.stopAt ? ` · arrêt dans ${formatDuration(ctx.stopAt - Date.now())}` : "")
+    `Bot started · ${filters.length > 1 ? `${filters.length} filters in rotation` : describeFilter(filters[0])}` +
+      ` · wait ${settings.timing.wait} s` +
+      (ctx.pauseAfter ? ` · pause every ~${ctx.pauseAfter} searches` : "") +
+      (ctx.stopAt ? ` · stop in ${formatDuration(ctx.stopAt - Date.now())}` : "")
   );
   mainLoop(ctx)
     .catch((e) => {
-      log.error(`Erreur inattendue du moteur : ${errorMessage(e)}`);
-      ctx.stopReason = ctx.stopReason || "erreur interne";
+      log.error(`Unexpected engine error: ${errorMessage(e)}`);
+      ctx.stopReason = ctx.stopReason || "internal error";
       ctx.stopAlert = true;
     })
     .finally(() => finalize(ctx));
   return true;
 };
 
-export const stopBot = (reason = "arrêt manuel", { alert = false, manual = false } = {}) => {
+export const stopBot = (reason = "manual stop", { alert = false, manual = false } = {}) => {
   const ctx = run;
   if (!ctx) {
     return;
   }
   if (ctx.stopping) {
-    // Stop pendant les mises en vente d'après-arrêt : on les interrompt.
+    // Stop during post-stop listings: interrupt them.
     if (ctx.finalToken && !ctx.finalToken.cancelled) {
       ctx.finalToken.cancel();
-      log.warn("Mises en vente d'après-arrêt interrompues.");
+      log.warn("Post-stop listings interrupted.");
     }
     return;
   }
@@ -347,7 +347,7 @@ export const pauseBot = () => {
     ctx.interrupt.cancel();
   }
   updateState({ status: STATUS.PAUSED, nextSearchAt: 0, pauseUntil: 0 });
-  log.info("Pause manuelle : clique sur Reprendre pour continuer.");
+  log.info("Manually paused: click Resume to continue.");
 };
 
 export const resumeBot = () => {
@@ -362,8 +362,8 @@ export const resumeBot = () => {
   updateState({ status: STATUS.RUNNING });
   log.info(
     ctx.notBefore > Date.now()
-      ? `Reprise du bot (prochaine recherche dans ${Math.ceil((ctx.notBefore - Date.now()) / 1000)} s).`
-      : "Reprise du bot."
+      ? `Resuming bot (next search in ${Math.ceil((ctx.notBefore - Date.now()) / 1000)} s).`
+      : "Bot resumed."
   );
 };
 
@@ -373,10 +373,10 @@ const finalize = async (ctx) => {
   }
   stopKeepAlive();
   releaseTracking(ctx);
-  // Les cartes achetées juste avant l'arrêt sont quand même traitées (sauf erreur bloquante). Le bot
-  // reste « en cours d'arrêt » pendant ce temps : aucun nouveau run ne peut démarrer en parallèle.
+  // Cards purchased just before stopping are still processed (unless a blocking error occurs). The bot
+  // remains in the stopping state during this time: another run cannot start in parallel.
   if (ctx.sellQueue.length && !ctx.stopAlert && sessionAlive()) {
-    log.info(`Traitement de ${ctx.sellQueue.length} carte(s) achetée(s) en attente… (Stop pour interrompre)`);
+    log.info(`Processing ${ctx.sellQueue.length} pending purchased card(s)… (Stop to interrupt)`);
     const detached = Object.assign({}, ctx, {
       token: createCancelToken(),
       notBefore: 0,
@@ -385,18 +385,18 @@ const finalize = async (ctx) => {
       halted: "",
     });
     ctx.finalToken = detached.token;
-    updateState({ status: STATUS.STOPPING, detail: "mise en vente des cartes achetées" });
-    await processSellQueue(detached).catch((e) => log.error(`Vente après arrêt : ${errorMessage(e)}`));
+    updateState({ status: STATUS.STOPPING, detail: "listing purchased cards" });
+    await processSellQueue(detached).catch((e) => log.error(`Post-stop selling: ${errorMessage(e)}`));
     if (detached.halted) {
       ctx.stopAlert = true;
-      ctx.stopReason = `${ctx.stopReason || "arrêt"} puis ${detached.halted}`;
+      ctx.stopReason = `${ctx.stopReason || "stop"} then ${detached.halted}`;
     }
   }
   if (ctx.sellQueue.length) {
-    log.warn(`${ctx.sellQueue.length} carte(s) achetée(s) non mise(s) en vente : elles sont dans tes non attribués.`);
+    log.warn(`${ctx.sellQueue.length} purchased card(s) not listed: they are in your unassigned items.`);
   }
   run = null;
-  const reason = ctx.stopReason || "arrêt";
+  const reason = ctx.stopReason || "stop";
   const stats = getState().stats;
   updateState({
     status: STATUS.STOPPED,
@@ -405,28 +405,28 @@ const finalize = async (ctx) => {
     nextSearchAt: 0,
     pauseUntil: 0,
   });
-  const summary = `${stats.searches} recherche(s), ${stats.won} achat(s), ${formatCoins(stats.spent)} dépensés`;
+  const summary = `${stats.searches} search(es), ${stats.won} purchase(s), ${formatCoins(stats.spent)} spent`;
   if (ctx.stopAlert) {
-    log.error(`Bot arrêté : ${reason} · ${summary}`);
+    log.error(`Bot stopped: ${reason} · ${summary}`);
   } else {
-    log.info(`Bot arrêté : ${reason} · ${summary}`);
+    log.info(`Bot stopped: ${reason} · ${summary}`);
   }
   if (ctx.manualStop && !ctx.stopAlert) {
     sound("stop");
   } else {
-    notifyEvent(ctx.stopAlert ? "alert" : "stop", `⏹ MagicBuyer arrêté : ${reason} (${summary})`, {
+    notifyEvent(ctx.stopAlert ? "alert" : "stop", `⏹ MagicBuyer stopped: ${reason} (${summary})`, {
       toast: true,
       negative: ctx.stopAlert,
     });
   }
 };
 
-// Arrêt demandé par une erreur : pendant les ventes d'après-arrêt, on interrompt seulement ces ventes.
+// Stop requested by an error: during post-stop selling, interrupt only those sales.
 const haltRun = (ctx, reason, options = {}) => {
   if (ctx.finalizing) {
     if (!ctx.halted) {
       ctx.halted = reason;
-      log.error(`Mises en vente d'après-arrêt interrompues : ${reason}.`);
+      log.error(`Post-stop listings interrupted: ${reason}.`);
     }
     ctx.token.cancel();
     return;
@@ -434,13 +434,13 @@ const haltRun = (ctx, reason, options = {}) => {
   stopBot(reason, options);
 };
 
-// ----------------------------------------------------------- boucle principale
+// ----------------------------------------------------------- main loop
 
 const mainLoop = async (ctx) => {
   try {
     await initialSync(ctx);
   } catch (e) {
-    log.warn(`Synchronisation initiale incomplète : ${errorMessage(e)}`);
+    log.warn(`Initial synchronization incomplete: ${errorMessage(e)}`);
   }
   if (ctx.token.cancelled) {
     return;
@@ -449,7 +449,7 @@ const mainLoop = async (ctx) => {
     updateState({ status: STATUS.RUNNING });
   }
   while (!ctx.token.cancelled) {
-    // Une erreur inattendue ne tue pas le bot : 3 d'affilée provoquent l'arrêt.
+    // An unexpected error does not kill the bot: 3 consecutive errors stop it.
     try {
       const searched = await loopStep(ctx);
       if (searched) {
@@ -457,9 +457,9 @@ const mainLoop = async (ctx) => {
       }
     } catch (e) {
       ctx.unexpectedErrors += 1;
-      log.error(`Erreur pendant le cycle (${ctx.unexpectedErrors}/3) : ${errorMessage(e)}`);
+      log.error(`Error during cycle (${ctx.unexpectedErrors}/3) : ${errorMessage(e)}`);
       if (ctx.unexpectedErrors >= 3) {
-        stopBot("erreurs internes répétées", { alert: true });
+        stopBot("repeated internal errors", { alert: true });
       } else {
         setNotBefore(ctx, Date.now() + 3000, "wait");
       }
@@ -467,7 +467,7 @@ const mainLoop = async (ctx) => {
   }
 };
 
-// Une étape de la boucle. Renvoie true si une recherche a eu lieu.
+// One loop step. Returns true if a search took place.
 const loopStep = async (ctx) => {
   if (ctx.paused) {
     await idle(ctx, 1000);
@@ -484,7 +484,7 @@ const loopStep = async (ctx) => {
     return false;
   }
   if (!sessionAlive()) {
-    stopBot("session EA déconnectée", { alert: true });
+    stopBot("EA session disconnected", { alert: true });
     return false;
   }
   if (ctx.pauseAfter > 0 && ctx.searchesSincePause >= ctx.pauseAfter) {
@@ -529,11 +529,11 @@ const waitForNextSlot = async (ctx) => {
   if (kind === "wait" && overshoot > 20000 && !ctx.warned.has("throttle")) {
     ctx.warned.add("throttle");
     log.warn(
-      "Chrome a ralenti cet onglet (onglet en arrière-plan) : garde le web app visible ou active « Garder l'onglet actif » dans Timing."
+      "Chrome has throttled this tab (in the background): keep the web app visible or enable “Keep tab active” in Timing."
     );
   }
   if (kind === "cooldown") {
-    log.info("Fin de la pause de sécurité, reprise des recherches.");
+    log.info("Safety pause ended, resuming searches.");
   }
   ctx.waitKind = null;
   updateState({ status: STATUS.RUNNING, nextSearchAt: 0, pauseUntil: 0 });
@@ -541,14 +541,14 @@ const waitForNextSlot = async (ctx) => {
 
 const checkStopConditions = (ctx, settings) => {
   if (ctx.stopAt && Date.now() >= ctx.stopAt) {
-    return "durée maximale atteinte";
+    return "maximum runtime reached";
   }
   const maxBuys = toInt(settings.buy.stopAfterPurchases);
   if (purchaseLimitReached(settings)) {
-    return `objectif de ${maxBuys} achat(s) atteint`;
+    return `target of ${maxBuys} purchase(s) reached`;
   }
   if (ctx.fullStop && settings.transfer.stopWhenFull) {
-    return "liste des transferts ou non attribués pleine";
+    return "transfer list or unassigned items full";
   }
   return null;
 };
@@ -566,12 +566,12 @@ const startScheduledPause = async (ctx, settings) => {
   if (!ctx.paused) {
     updateState({ status: STATUS.AUTO_PAUSE, pauseUntil: until, nextSearchAt: until, waitStartedAt: Date.now() });
   }
-  log.info(`Pause automatique de ${Math.round(seconds)} s après ${done} recherches.`);
-  // On profite de la pause pour la revente et la liste des transferts.
+  log.info(`Automatic pause of ${Math.round(seconds)} s after ${done} searches.`);
+  // Use the pause to handle reselling and the transfer list.
   await maintenance(ctx, { force: true });
 };
 
-// Filtres réellement exploitables (cible + prix), en rotation si activée.
+// Usable filters (target + price), rotated when enabled.
 const nextFilter = (ctx, settings) => {
   const usable = [];
   runnableFilters()
@@ -607,7 +607,7 @@ const nextFilter = (ctx, settings) => {
   const pick = usable[ctx.filterIndex % usable.length];
   if (pick.filter.id !== ctx.currentFilterId) {
     if (ctx.currentFilterId) {
-      log.info(`Filtre suivant : ${pick.filter.name} (${describeFilter(pick.filter)})`);
+      log.info(`Next filter: ${pick.filter.name} (${describeFilter(pick.filter)})`);
     }
     ctx.currentFilterId = pick.filter.id;
     ctx.page = 1;
@@ -621,15 +621,15 @@ const handleNoFilter = (ctx, settings) => {
     .filter(filterHasTarget)
     .some((filter) => referencePending(filter));
   if (!waiting) {
-    stopBot("aucun filtre exploitable (joueur/critère ou prix d'achat max manquant)");
+    stopBot("no usable filter (missing player/criterion or max buy price)");
     return;
   }
   const now = Date.now();
   if (!ctx.referenceWaitSince) {
     ctx.referenceWaitSince = now;
-    log.info("En attente du prix FUTBIN pour calculer le prix d'achat max…");
+    log.info("Waiting for the FUTBIN price to calculate the max buy price…");
   } else if (now - ctx.referenceWaitSince > REFERENCE_WAIT_MAX) {
-    stopBot("prix FUTBIN indisponible depuis 2 min (onglet FUTBIN pour le diagnostic)", { alert: true });
+    stopBot("FUTBIN price unavailable for 2 minutes (see the FUTBIN tab for diagnostics)", { alert: true });
     return;
   }
   setNotBefore(ctx, now + 5000, "wait");
@@ -652,8 +652,8 @@ const nextWait = (ctx, cycleStart) => {
 
 const snipeCycle = async (ctx, filter, maxBuy, settings) => {
   const bidOn = settings.bid.enabled && toInt(filter.maxBid) > 0;
-  // Avec un prix d'achat max, EA ne renvoie que des annonces sous ce prix : les enchères
-  // passent donc par une recherche dédiée (toutes les N recherches).
+  // With a max buy price, EA returns only listings below that price: bids
+  // therefore use a dedicated search (every N searches).
   let bidSearch = false;
   if (bidOn && !maxBuy) {
     bidSearch = true;
@@ -702,18 +702,18 @@ const snipeCycle = async (ctx, filter, maxBuy, settings) => {
   const maxResults = toInt(settings.buy.maxResults);
   if (!bidSearch && maxResults && items.length > maxResults) {
     log.warn(
-      `${items.length} résultats (seuil ${maxResults}) : achats ignorés, ton prix max est peut-être au-dessus du marché.`
+      `${items.length} results (threshold ${maxResults}): skipping purchases; your max price may be above market value.`
     );
     return;
   }
-  // Mode FUTBIN : une page entière d'annonces sous le prix max veut dire que ce prix est au-dessus du
-  // marché (prix FUTBIN faux ou périmé, pourcentage trop haut) : aucun achat et relecture du prix.
+  // FUTBIN mode: a full page of listings below the max price means it is above
+  // market value (incorrect/outdated FUTBIN price or percentage too high): do not buy and refresh the price.
   if (!bidSearch && filter.priceMode === "futbin" && items.length >= market.marketPageSize()) {
     const warnKey = `futbin-full:${filter.id}:${maxBuy}`;
     if (!ctx.warned.has(warnKey)) {
       ctx.warned.add(warnKey);
       log.warn(
-        `${filter.name} : ${items.length} annonces sous ${formatCoins(maxBuy)} (page pleine) : prix FUTBIN au-dessus du marché (périmé ou % trop haut), aucun achat. Baisse le % ou fixe un plafond.`
+        `${filter.name} : ${items.length} listings below ${formatCoins(maxBuy)} (full page): FUTBIN price is above market value (outdated or percentage too high), no purchase. Lower the percentage or set a cap.`
       );
       requestPrice(futbinKeyForFilter(filter), futbinHint(filter));
     }
@@ -732,7 +732,7 @@ const snipeCycle = async (ctx, filter, maxBuy, settings) => {
       if (!ctx.warned.has(`coins:${deal.tradeId}`)) {
         ctx.warned.add(`coins:${deal.tradeId}`);
         log.warn(
-          `${market.nameOf(deal.item)} à ${formatCoins(deal.bin)} : coins insuffisants (${formatCoins(coins)}${reserve ? `, réserve ${formatCoins(reserve)}` : ""}).`
+          `${market.nameOf(deal.item)} at ${formatCoins(deal.bin)} : insufficient coins (${formatCoins(coins)}${reserve ? `, reserve ${formatCoins(reserve)}` : ""}).`
         );
       }
       continue;
@@ -792,7 +792,7 @@ const analyzeResults = (ctx, items, filter, maxBuy, settings, bidOn) => {
       auctions.push({ item, tradeId, auction, rating, bin });
     }
   });
-  // Le moins cher d'abord ; à prix égal, l'annonce la plus récente (plus de chances d'être libre).
+  // Cheapest first; for equal prices, the most recent listing (more likely still available).
   deals.sort((a, b) => a.bin - b.bin || b.expires - a.expires);
   return { deals, auctions, counts };
 };
@@ -801,24 +801,24 @@ const logSearch = (filter, total, analysis, latency, page, maxBuy, bidSearch) =>
   const { deals, counts } = analysis;
   const extras = [];
   if (counts.own) {
-    extras.push(`${counts.own} à toi`);
+    extras.push(`${counts.own} owned by you`);
   }
   if (counts.seen) {
-    extras.push(`${counts.seen} déjà tentée(s)`);
+    extras.push(`${counts.seen} already attempted`);
   }
   if (counts.other) {
-    extras.push(`${counts.other} autre(s) carte(s)`);
+    extras.push(`${counts.other} other card(s)`);
   }
   if (counts.rating) {
-    extras.push(`${counts.rating} hors note`);
+    extras.push(`${counts.rating} outside rating range`);
   }
   if (counts.gk) {
-    extras.push(`${counts.gk} gardien(s)`);
+    extras.push(`${counts.gk} goalkeeper(s)`);
   }
   const text =
-    `${filter.name}${bidSearch ? " (enchères)" : ""} · ${total} résultat${total > 1 ? "s" : ""}` +
+    `${filter.name}${bidSearch ? " (bids)" : ""} · ${total} result${total > 1 ? "s" : ""}` +
     (page > 1 ? ` (page ${page})` : "") +
-    (deals.length ? ` · ${deals.length} affaire${deals.length > 1 ? "s" : ""} ≤ ${formatCoins(maxBuy)}` : "") +
+    (deals.length ? ` · ${deals.length} deal${deals.length > 1 ? "s" : ""} ≤ ${formatCoins(maxBuy)}` : "") +
     (extras.length ? ` · ${extras.join(", ")}` : "") +
     ` · ${Math.round(latency)} ms`;
   log.search(text);
@@ -833,11 +833,11 @@ const attemptBuy = async (ctx, deal, filter) => {
     bumpStat("won");
     bumpStat("spent", deal.bin);
     updateState({ coins: getCoins() });
-    log.buy(`Acheté : ${name} ${deal.rating} pour ${formatCoins(deal.bin)} (${Math.round(result.latency)} ms)`, {
+    log.buy(`Purchased: ${name} ${deal.rating} for ${formatCoins(deal.bin)} (${Math.round(result.latency)} ms)`, {
       definitionId: deal.item.definitionId,
     });
-    recordTransaction({ type: "achat", name, rating: deal.rating, price: deal.bin, filter: filter.name });
-    notifyEvent("buy", `✅ Achat : ${name} ${deal.rating} pour ${formatCoins(deal.bin)} coins`);
+    recordTransaction({ type: "purchase", name, rating: deal.rating, price: deal.bin, filter: filter.name });
+    notifyEvent("buy", `✅ Purchase: ${name} ${deal.rating} for ${formatCoins(deal.bin)} coins`);
     queueSale(ctx, { item: deal.item, buyPrice: deal.bin, filter, name, rating: deal.rating });
     return "won";
   }
@@ -845,12 +845,12 @@ const attemptBuy = async (ctx, deal, filter) => {
   if (error.kind === KIND.GONE) {
     ctx.attempted.add(deal.tradeId);
     bumpStat("missed");
-    log.warn(`Raté : ${name} à ${formatCoins(deal.bin)}, déjà acheté par quelqu'un d'autre (${error.code}).`);
-    recordTransaction({ type: "raté", name, rating: deal.rating, price: deal.bin, filter: filter.name });
-    notifyEvent("fail", `❌ Raté : ${name} ${deal.rating} à ${formatCoins(deal.bin)}`);
+    log.warn(`Missed: ${name} at ${formatCoins(deal.bin)}, already bought by someone else (${error.code}).`);
+    recordTransaction({ type: "missed", name, rating: deal.rating, price: deal.bin, filter: filter.name });
+    notifyEvent("fail", `❌ Missed: ${name} ${deal.rating} at ${formatCoins(deal.bin)}`);
     return trackStopCode(ctx, error) ? "fatal" : "missed";
   }
-  // Erreur passagère : un seul nouvel essai autorisé sur cette annonce.
+  // Temporary error: allow only one retry on this listing.
   const tries = (ctx.retries.get(deal.tradeId) || 0) + 1;
   ctx.retries.set(deal.tradeId, tries);
   if (tries >= 2 || isFatal(error.kind)) {
@@ -860,7 +860,7 @@ const attemptBuy = async (ctx, deal, filter) => {
   return ctx.token.cancelled ? "fatal" : "error";
 };
 
-// ---------------------------------------------------------------- enchères
+// ---------------------------------------------------------------- bids
 
 const placeBids = async (ctx, auctions, filter, settings) => {
   const maxBid = floorPrice(filter.maxBid);
@@ -909,12 +909,12 @@ const placeBids = async (ctx, auctions, filter, settings) => {
         rating: entry.rating,
         endsAt: Date.now() + (Number(auction.expires) || 0) * 1000,
       });
-      log.info(`Enchère placée : ${name} ${entry.rating} à ${formatCoins(price)} (fin dans ${Math.round(Number(auction.expires) || 0)} s).`);
+      log.info(`Bid placed: ${name} ${entry.rating} at ${formatCoins(price)} (ends in ${Math.round(Number(auction.expires) || 0)} s).`);
       continue;
     }
     const error = result.error || classify(result.response);
     if (error.kind === KIND.GONE) {
-      log.warn(`Enchère refusée sur ${name} (surenchéri ou terminé).`);
+      log.warn(`Bid rejected on ${name} (outbid or expired).`);
       if (trackStopCode(ctx, error)) {
         break;
       }
@@ -978,9 +978,9 @@ const checkBids = async (ctx, force) => {
       bumpStat("bidsWon");
       bumpStat("won");
       bumpStat("spent", price);
-      log.buy(`Enchère gagnée : ${bid.name} ${bid.rating} pour ${formatCoins(price)}.`);
-      recordTransaction({ type: "enchère gagnée", name: bid.name, rating: bid.rating, price, filter: bid.filter.name });
-      notifyEvent("buy", `🏆 Enchère gagnée : ${bid.name} pour ${formatCoins(price)} coins`);
+      log.buy(`Bid won: ${bid.name} ${bid.rating} for ${formatCoins(price)}.`);
+      recordTransaction({ type: "bid won", name: bid.name, rating: bid.rating, price, filter: bid.filter.name });
+      notifyEvent("buy", `🏆 Bid won: ${bid.name} for ${formatCoins(price)} coins`);
       queueSale(ctx, { item, buyPrice: price, filter: bid.filter, name: bid.name, rating: bid.rating });
     } else if (
       safeCall(auction, "isExpired") ||
@@ -988,7 +988,7 @@ const checkBids = async (ctx, force) => {
     ) {
       ctx.bids.delete(tradeId);
       release.push(item);
-      log.info(`Enchère perdue : ${bid.name}.`);
+      log.info(`Bid lost: ${bid.name}.`);
     } else if (safeCall(auction, "isOutbid")) {
       const next = priceAbove(toInt(auction.currentBid));
       const maxBid = floorPrice(bid.filter.maxBid);
@@ -999,14 +999,14 @@ const checkBids = async (ctx, force) => {
         if (rebid.ok) {
           bid.price = next;
           bumpStat("bids");
-          log.info(`Surenchère : ${bid.name} à ${formatCoins(next)}.`);
+          log.info(`Higher bid: ${bid.name} at ${formatCoins(next)}.`);
         } else if (rebid.error && rebid.error.kind !== KIND.GONE) {
           await handleFailure(ctx, rebid.error, "bid", bid.name);
         }
       } else {
         ctx.bids.delete(tradeId);
         release.push(item);
-        log.info(`Surenchéri sur ${bid.name} au-delà de ton max (${formatCoins(maxBid)}) : abandon.`);
+        log.info(`Outbid on ${bid.name} beyond your max (${formatCoins(maxBid)}): giving up.`);
       }
     }
   }
@@ -1024,11 +1024,11 @@ const checkBids = async (ctx, force) => {
   }
 };
 
-// ----------------------------------------------------------------- revente
+// ----------------------------------------------------------------- reselling
 
 const sellKey = (job) => Number(job.item && job.item.definitionId) || 0;
 
-// Demande le prix FUTBIN de la version achetée (sauf s'il a moins d'une minute).
+// Request the purchased version's FUTBIN price (unless it is less than a minute old).
 const requestSellPrice = (job) => {
   const key = sellKey(job);
   if (!key || currentPrice(key, 60 * 1000, "sell")) {
@@ -1041,7 +1041,7 @@ const requestSellPrice = (job) => {
 const queueSale = (ctx, job) => {
   const entry = Object.assign({ deferrals: 0, requestedAt: 0, queuedAt: Date.now() }, job);
   ctx.sellQueue.push(entry);
-  // Le prix FUTBIN est demandé tout de suite, en arrière-plan, pendant la fin du cycle.
+  // Request the FUTBIN price immediately in the background while the cycle finishes.
   const sell = getSettings().sell;
   if (sell.mode === "list" && sellModeFor(entry.filter, sell) === "futbin") {
     requestSellPrice(entry);
@@ -1050,17 +1050,17 @@ const queueSale = (ctx, job) => {
 
 const moveToTransferList = async (ctx, job) => {
   if (market.isPileFull("TRANSFER")) {
-    log.warn(`${job.name} laissé dans les non attribués : liste des transferts pleine.`);
+    log.warn(`${job.name} left in unassigned items: transfer list full.`);
     ctx.fullStop = true;
     return;
   }
   const result = await market.moveItem(job.item, "TRANSFER");
   if (result.ok) {
     ctx.transferDirty = true;
-    log.info(`${job.name} envoyé dans la liste des transferts.`);
+    log.info(`${job.name} sent to the transfer list.`);
     return;
   }
-  log.warn(`${job.name} n'a pas pu être déplacé : ${result.error.label}.`);
+  log.warn(`${job.name} could not be moved: ${result.error.label}.`);
   if (result.error.kind === KIND.FULL) {
     ctx.fullStop = true;
   } else {
@@ -1068,24 +1068,24 @@ const moveToTransferList = async (ctx, job) => {
   }
 };
 
-// Prix de revente : fixe (filtre ou onglet Vente) ou % du prix FUTBIN de la version achetée.
-// Renvoie null tant que le prix FUTBIN n'est pas arrivé (la vente est reportée au cycle suivant).
+// Sell price: fixed (filter or Sell tab) or a percentage of the purchased version's FUTBIN price.
+// Returns null until the FUTBIN price arrives (defer the sale to the next cycle).
 const sellPriceFor = async (ctx, job, sell) => {
   if (sellModeFor(job.filter, sell) !== "futbin") {
     const price = fixedSellPriceFor(job.filter, sell);
-    return { price, reason: price ? "" : "aucun prix de revente (filtre ou onglet Vente)" };
+    return { price, reason: price ? "" : "no sell price (filter or Sell tab)" };
   }
   const key = sellKey(job);
   let reference = key ? currentPrice(key, SELL_PRICE_MAX_AGE, "sell") : 0;
   if (!reference && key && ctx.finalizing) {
-    // Après l'arrêt il n'y a plus de cycle suivant : on attend la réponse FUTBIN (20 s max).
+    // After stopping there is no next cycle: wait for the FUTBIN response (20 seconds max).
     await withTimeout(requestSellPrice(job), 20000);
     reference = currentPrice(key, SELL_PRICE_MAX_AGE, "sell");
   }
   if (reference) {
     const { price, percent } = futbinSellPrice(reference, sellPercentFor(job.filter, sell));
     log.info(
-      `Prix FUTBIN ${job.name} : ${formatCoins(reference)} → vente à ${Math.round(percent)} % = ${formatCoins(price)}.`
+      `FUTBIN price ${job.name} : ${formatCoins(reference)} → sell at ${Math.round(percent)} % = ${formatCoins(price)}.`
     );
     return { price, reason: "" };
   }
@@ -1096,17 +1096,17 @@ const sellPriceFor = async (ctx, job, sell) => {
     }
     return null;
   }
-  return { price: 0, reason: "prix FUTBIN indisponible" };
+  return { price: 0, reason: "FUTBIN price unavailable" };
 };
 
-// Renvoie "deferred" si la vente doit être retentée au prochain cycle.
+// Returns deferred if the sale should be retried on the next cycle.
 const sellJob = async (ctx, job) => {
   const sell = getSettings().sell;
   if (sell.mode === "none") {
     return "done";
   }
   if (sell.maxRating && job.rating > toInt(sell.maxRating)) {
-    log.info(`${job.name} (${job.rating}) gardé : note au-dessus du seuil de vente.`);
+    log.info(`${job.name} (${job.rating}) kept: rating above the sell threshold.`);
     return "done";
   }
   if (sell.mode === "transfer") {
@@ -1118,12 +1118,12 @@ const sellJob = async (ctx, job) => {
     return "deferred";
   }
   if (!plan.price) {
-    log.warn(`${job.name} : ${plan.reason}, envoyé dans la liste des transferts sans être listé.`);
+    log.warn(`${job.name} : ${plan.reason}, sent to the transfer list without listing.`);
     await moveToTransferList(ctx, job);
     return "done";
   }
   if (market.isPileFull("TRANSFER")) {
-    log.warn(`${job.name} laissé dans les non attribués : liste des transferts pleine.`);
+    log.warn(`${job.name} left in unassigned items: transfer list full.`);
     ctx.fullStop = true;
     return "done";
   }
@@ -1133,7 +1133,7 @@ const sellJob = async (ctx, job) => {
   const minProfit = toInt(sell.minProfit);
   if (minProfit && profit < minProfit) {
     log.warn(
-      `${job.name} : bénéfice ${formatCoins(profit)} < minimum ${formatCoins(minProfit)}, pas mis en vente (envoyé en liste des transferts).`
+      `${job.name} : profit ${formatCoins(profit)} < minimum ${formatCoins(minProfit)}, not listed (sent to the transfer list).`
     );
     await moveToTransferList(ctx, job);
     return "done";
@@ -1146,14 +1146,14 @@ const sellJob = async (ctx, job) => {
     bumpStat("listed");
     bumpStat("estProfit", profit);
     log.success(
-      `Mis en vente : ${job.name} à ${formatCoins(price)} (départ ${formatCoins(start)}) · bénéfice estimé ${formatCoins(profit)}.`
+      `Listed: ${job.name} at ${formatCoins(price)} (starting bid ${formatCoins(start)}) · estimated profit ${formatCoins(profit)}.`
     );
-    recordTransaction({ type: "mise en vente", name: job.name, rating: job.rating, price, profit, filter: job.filter.name });
-    notifyEvent("list", `📤 ${job.name} mis en vente à ${formatCoins(price)} (bénéfice ${formatCoins(profit)})`);
+    recordTransaction({ type: "listing", name: job.name, rating: job.rating, price, profit, filter: job.filter.name });
+    notifyEvent("list", `📤 ${job.name} listed at ${formatCoins(price)} (profit ${formatCoins(profit)})`);
     return "done";
   }
   const error = result.error || classify(result.response);
-  log.error(`Mise en vente de ${job.name} échouée : ${error.label}.`);
+  log.error(`Listing ${job.name} failed: ${error.label}.`);
   if (error.kind === KIND.FULL) {
     ctx.fullStop = true;
   } else {
@@ -1179,9 +1179,9 @@ const processSellQueue = async (ctx) => {
         later.push(job);
       }
     } catch (e) {
-      log.error(`Revente de ${job.name} : ${errorMessage(e)}`);
+      log.error(`Reselling ${job.name} : ${errorMessage(e)}`);
     }
-    // Pause entre deux actions EA seulement (une vente reportée n'a envoyé aucune requête).
+    // Pause only between two EA actions (a deferred sale sent no request).
     if (outcome !== "deferred" && index < jobs.length - 1 && !ctx.token.cancelled) {
       await sleep(randomBetween(700, 1500), ctx.token);
     }
@@ -1189,7 +1189,7 @@ const processSellQueue = async (ctx) => {
   ctx.sellQueue.push(...later);
 };
 
-// ------------------------------------------------------- liste des transferts
+// ------------------------------------------------------- transfer list
 
 const checkTransferList = async (ctx) => {
   const result = await market.fetchTransferList();
@@ -1220,7 +1220,7 @@ const checkTransferList = async (ctx) => {
       bumpStat("soldCount", summary.sold);
       bumpStat("soldValue", earned);
       ctx.transferDirty = true;
-      log.success(`${summary.sold} vente(s) encaissée(s) : +${formatCoins(earned)} coins.`);
+      log.success(`${summary.sold} sale(s) collected: +${formatCoins(earned)} coins.`);
       await market.refreshCoins();
       updateState({ coins: getCoins() });
     } else {
@@ -1229,7 +1229,7 @@ const checkTransferList = async (ctx) => {
   }
   if (capacity && summary.total >= capacity && !ctx.warned.has("transfer-full")) {
     ctx.warned.add("transfer-full");
-    log.warn(`Liste des transferts pleine (${summary.total}/${capacity}).`);
+    log.warn(`Transfer list full (${summary.total}/${capacity}).`);
   }
 };
 
@@ -1238,15 +1238,15 @@ const relistSamePrice = async (ctx, count) => {
   if (relist.ok) {
     ctx.transferDirty = true;
     ctx.relistPending.clear();
-    log.success(`${count} carte(s) invendue(s) relistée(s) au même prix.`);
+    log.success(`${count} unsold card(s) relisted at the same price.`);
   } else {
-    log.warn(`Relist impossible : ${relist.error.label}.`);
+    log.warn(`Cannot relist: ${relist.error.label}.`);
     await handleFailure(ctx, relist.error, "transfer", null, { quiet: true });
   }
 };
 
-// Relist des invendus au prix FUTBIN du moment (% de l'onglet Vente), 5 cartes par passage.
-// Une carte sans prix FUTBIN est retentée ; après 3 min sans prix, relist au même prix.
+// Relist unsold cards at the current FUTBIN price (Sell tab percentage), 5 cards per pass.
+// Retry cards without a FUTBIN price; after 3 minutes without a price, relist at the same price.
 const relistAtFutbin = async (ctx, items) => {
   const sell = getSettings().sell;
   const now = Date.now();
@@ -1283,9 +1283,9 @@ const relistAtFutbin = async (ctx, items) => {
     if (res.ok) {
       listed += 1;
       ctx.relistPending.delete(String(entry.item.id));
-      log.success(`Relisté : ${name} à ${formatCoins(listing.buyNow)} (FUTBIN ${formatCoins(entry.reference)}).`);
+      log.success(`Relisted: ${name} at ${formatCoins(listing.buyNow)} (FUTBIN ${formatCoins(entry.reference)}).`);
     } else {
-      log.warn(`Relist de ${name} échoué : ${res.error.label}.`);
+      log.warn(`Relisting ${name} failed: ${res.error.label}.`);
       await handleFailure(ctx, res.error, "list", name, { quiet: true });
       break;
     }
@@ -1296,12 +1296,12 @@ const relistAtFutbin = async (ctx, items) => {
   }
   const stale = pending.filter((item) => now - (ctx.relistPending.get(String(item.id)) || now) > RELIST_FALLBACK_AFTER);
   if (stale.length && ready.length <= RELIST_BATCH && !blocked(ctx)) {
-    log.warn(`${stale.length} invendu(s) sans prix FUTBIN depuis 3 min : relist au même prix.`);
+    log.warn(`${stale.length} unsold card(s) without a FUTBIN price for 3 minutes: relisting at the same price.`);
     await relistSamePrice(ctx, pending.length);
     return;
   }
   if (pending.length || ready.length > RELIST_BATCH) {
-    // Nouveau passage dans ~90 s (au prochain contrôle de la liste des transferts).
+    // Next pass in ~90 seconds (at the next transfer list check).
     ctx.lastRelistAt = Date.now() - RELIST_MIN_GAP + RELIST_RETRY;
   }
 };
@@ -1337,7 +1337,7 @@ const initialSync = async (ctx) => {
         }
       });
       if (ctx.userWatched.size) {
-        log.info(`${ctx.userWatched.size} carte(s) déjà dans ta liste de suivi : le bot n'y touchera pas.`);
+        log.info(`${ctx.userWatched.size} card(s) already on your watch list: the bot will leave them alone.`);
       }
     } else {
       await handleFailure(ctx, watched.error, "watch", null, { quiet: true });
@@ -1367,13 +1367,13 @@ const initialSync = async (ctx) => {
             const record = getPriceRecord(key);
             const age = record && record.updatedAgoSec != null ? Math.round(record.updatedAgoSec / 60) : null;
             log.info(
-              `Prix FUTBIN ${filter.name} : ${formatCoins(price)} → achat max ${formatCoins(effectiveMaxBuy(filter))} (${filter.futbinPercent} %${filter.maxBuy ? `, plafond ${formatCoins(filter.maxBuy)}` : ""})` +
-                (age != null ? ` · prix mis à jour par FUTBIN il y a ${age} min.` : ".")
+              `FUTBIN price ${filter.name} : ${formatCoins(price)} → max buy ${formatCoins(effectiveMaxBuy(filter))} (${filter.futbinPercent} %${filter.maxBuy ? `, cap ${formatCoins(filter.maxBuy)}` : ""})` +
+                (age != null ? ` · FUTBIN price updated ${age} min ago.` : ".")
             );
           } else {
             const record = getPriceRecord(key);
             log.warn(
-              `Prix FUTBIN de ${filter.name} indisponible${record && record.status === "miss" ? " (carte introuvable sur FUTBIN)" : ""} : le filtre attend.`
+              `FUTBIN price for ${filter.name} unavailable${record && record.status === "miss" ? " (card not found on FUTBIN)" : ""} : the filter will wait.`
             );
           }
         });
@@ -1383,9 +1383,9 @@ const initialSync = async (ctx) => {
   );
 };
 
-// ------------------------------------------------------------------ erreurs
+// ------------------------------------------------------------------ errors
 
-// Codes d'arrêt personnalisés (onglet Timing). Renvoie true si le bot a été arrêté.
+// Custom stop codes (Timing tab). Returns true if the bot was stopped.
 const trackStopCode = (ctx, error) => {
   const custom = parseCodeList(getSettings().errors.stopCodes);
   if (!error || !error.code || !custom.has(error.code)) {
@@ -1395,19 +1395,19 @@ const trackStopCode = (ctx, error) => {
   ctx.errorCounts.set(error.code, count);
   const limit = Math.max(1, toInt(getSettings().errors.maxConsecutiveFailures) || 3);
   if (count >= limit) {
-    haltRun(ctx, `code d'erreur ${error.code} reçu ${count} fois`, { alert: true });
+    haltRun(ctx, `error code ${error.code} received ${count} times`, { alert: true });
     return true;
   }
   return false;
 };
 
 const LABELS = {
-  buy: "achat",
-  bid: "enchère",
-  list: "mise en vente",
-  move: "déplacement",
-  watch: "liste de suivi",
-  transfer: "liste des transferts",
+  buy: "purchase",
+  bid: "bid",
+  list: "listing",
+  move: "move",
+  watch: "watch list",
+  transfer: "transfer list",
 };
 
 const handleFailure = async (ctx, error, where, subject, { quiet = false } = {}) => {
@@ -1421,16 +1421,16 @@ const handleFailure = async (ctx, error, where, subject, { quiet = false } = {})
   const prefix = subject ? `${subject} : ` : "";
   switch (error.kind) {
     case KIND.CAPTCHA:
-      haltRun(ctx, "captcha EA : ouvre le web app, résous le captcha puis relance", { alert: true });
+      haltRun(ctx, "EA captcha: open the web app, solve the captcha, then restart", { alert: true });
       return;
     case KIND.AUTH:
-      haltRun(ctx, "session EA expirée : reconnecte-toi au web app", { alert: true });
+      haltRun(ctx, "EA session expired: log back in to the web app", { alert: true });
       return;
     case KIND.BANNED:
-      haltRun(ctx, "compte bloqué par EA", { alert: true });
+      haltRun(ctx, "account blocked by EA", { alert: true });
       return;
     case KIND.LOCKED:
-      haltRun(ctx, "marché des transferts verrouillé par EA (soft ban)", { alert: true });
+      haltRun(ctx, "transfer market locked by EA (soft ban)", { alert: true });
       return;
     case KIND.RATE:
     case KIND.BLOCKED:
@@ -1445,7 +1445,7 @@ const handleFailure = async (ctx, error, where, subject, { quiet = false } = {})
       log.warn(`${prefix}${error.label}.`);
       return;
     case KIND.FUNDS:
-      log.warn(`${prefix}coins insuffisants.`);
+      log.warn(`${prefix}insufficient coins.`);
       return;
     default:
       break;
@@ -1454,18 +1454,18 @@ const handleFailure = async (ctx, error, where, subject, { quiet = false } = {})
     ctx.consecutiveFailures += 1;
     const limit = Math.max(1, toInt(getSettings().errors.maxConsecutiveFailures) || 3);
     if (ctx.consecutiveFailures >= limit) {
-      stopBot(`${ctx.consecutiveFailures} recherches en échec d'affilée (${error.label})`, { alert: true });
+      stopBot(`${ctx.consecutiveFailures} consecutive failed searches (${error.label})`, { alert: true });
     } else {
-      log.warn(`Recherche en échec : ${error.label} (${ctx.consecutiveFailures}/${limit}).`);
+      log.warn(`Search failed: ${error.label} (${ctx.consecutiveFailures}/${limit}).`);
     }
     return;
   }
   if (!quiet) {
-    log.error(`${prefix}${LABELS[where] || where} en échec (${error.label}).`);
+    log.error(`${prefix}${LABELS[where] || where} failed (${error.label}).`);
   }
 };
 
-// Pause de sécurité sur 429 / 512 / 521 : aucune requête avant la fin (même après Pause/Reprise).
+// Safety pause for 429 / 512 / 521: no requests until it ends (even after Pause/Resume).
 const startCooldown = (ctx, error) => {
   if (inCooldown(ctx)) {
     return;
@@ -1474,43 +1474,43 @@ const startCooldown = (ctx, error) => {
   const settings = getSettings().errors;
   const maxCooldowns = Math.max(0, toInt(settings.maxCooldowns));
   if (ctx.cooldowns > maxCooldowns) {
-    stopBot(`EA limite les requêtes (${error.code}) de façon répétée`, { alert: true });
+    stopBot(`EA is rate-limiting requests (${error.code}) repeatedly`, { alert: true });
     return;
   }
   const seconds = pickSeconds(settings.cooldown, "M") || 300;
   const until = Date.now() + seconds * 1000;
   setNotBefore(ctx, until, "cooldown");
   log.warn(
-    `${error.label} (${error.code}) : pause de sécurité de ${seconds >= 90 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds)} s`} (${ctx.cooldowns}/${maxCooldowns}).`
+    `${error.label} (${error.code}): safety pause of ${seconds >= 90 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds)} s`} (${ctx.cooldowns}/${maxCooldowns}).`
   );
-  notifyEvent("fail", `⚠️ ${error.label} (${error.code}) : pause de sécurité`);
+  notifyEvent("fail", `⚠️ ${error.label} (${error.code}): safety pause`);
   if (!ctx.paused) {
     updateState({ status: STATUS.COOLDOWN, pauseUntil: until, nextSearchAt: until, waitStartedAt: Date.now() });
   }
 };
 
-// --------------------------------------------------------- recherche de test
+// --------------------------------------------------------- test search
 
-// Une recherche unique, sans achat, pour vérifier un filtre et voir les prix du marché.
+// A single search without purchasing to check a filter and see market prices.
 export const previewSearch = async (filter) => {
   if (run) {
-    return { ok: false, message: "Arrête le bot pour lancer une recherche de test." };
+    return { ok: false, message: "Stop the bot before running a test search." };
   }
   if (!isAppReady() || !getUser()) {
-    return { ok: false, message: "Connecte-toi au web app EA d'abord." };
+    return { ok: false, message: "Log in to the EA web app first." };
   }
   const key = filter.priceMode === "futbin" ? futbinKeyForFilter(filter) : 0;
   if (key && !effectiveMaxBuy(filter)) {
     await withTimeout(requestPrice(key, futbinHint(filter)), 20000);
     if (!effectiveMaxBuy(filter)) {
-      return { ok: false, message: "Prix FUTBIN indisponible : vérifie l'accès dans l'onglet FUTBIN (bouton Tester)." };
+      return { ok: false, message: "FUTBIN price unavailable: check access in the FUTBIN tab (Test button)." };
     }
   }
   const maxBuy = effectiveMaxBuy(filter);
   const criteria = buildCriteria(filter, { maxBuy });
   const result = await market.searchMarket(criteria, 1);
   if (!result.ok) {
-    return { ok: false, message: `Recherche refusée : ${result.error.label} (${result.error.code})` };
+    return { ok: false, message: `Search rejected: ${result.error.label} (${result.error.code})` };
   }
   const rows = result.items
     .map((item) => {

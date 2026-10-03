@@ -3,7 +3,7 @@ import { playTone } from "./audio";
 import { eaToast } from "./page";
 import { getSettings } from "./settings";
 
-// Notifications : son, bureau, Discord (webhook), Telegram, toast EA.
+// Notifications: sound, desktop, Discord (webhook), Telegram, EA toast.
 
 export const sound = (kind) => {
   const settings = getSettings().notify;
@@ -65,7 +65,7 @@ const sendDiscord = (message, kind) => {
       {
         description: message,
         color: COLORS[kind] || COLORS.test,
-        footer: { text: `MagicBuyer · ${new Date().toLocaleTimeString("fr-FR")}` },
+        footer: { text: `MagicBuyer · ${new Date().toLocaleTimeString("en-US")}` },
       },
     ],
   });

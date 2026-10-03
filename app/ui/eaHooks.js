@@ -11,20 +11,20 @@ import { qs, setText } from "./dom";
 import { showTargetTab, togglePanel } from "./panel";
 import { importSnapshot } from "./pages/target";
 
-// Intégrations dans l'interface du web app EA (FC 27).
+// Integrations in the EA web app interface (FC 27).
 
 const TAB_CLASS = "mb-native-tab";
 let delegatesBound = false;
 let currentSearchController = null;
 
-// ------------------------------------------------ bouton dans la barre d'onglets
+// ------------------------------------------------ tab bar button
 
 const bindDelegates = () => {
   if (delegatesBound) {
     return;
   }
   delegatesBound = true;
-  // Capture au niveau document : EA ne voit jamais les clics sur nos boutons.
+  // Capture at document level: EA never sees clicks on our buttons.
   ["pointerdown", "mousedown", "touchstart", "touchend", "mouseup", "pointerup"].forEach((type) =>
     document.addEventListener(
       type,
@@ -65,7 +65,7 @@ export const ensureTabButton = () => {
   bar.appendChild(button);
 };
 
-// ------------------------------------------------- marché des transferts EA
+// ------------------------------------------------- EA transfer market
 
 const readController = (ctrl) => {
   const viewmodel = ctrl && ctrl.viewmodel;
@@ -80,7 +80,7 @@ const captureController = (ctrl, quiet) => {
   if (snapshot) {
     setLastEaSearch(snapshot);
     if (!quiet) {
-      log.info("Recherche du marché EA capturée.");
+      log.info("EA market search captured.");
     }
   }
   return snapshot;
@@ -101,8 +101,8 @@ const injectSearchBar = (ctrl) => {
   const bar = document.createElement("div");
   bar.className = "mb-ea-bar";
   bar.innerHTML = `<strong>⚡ MagicBuyer</strong>
-    <button type="button" data-mb-ea="snipe">Sniper cette recherche</button>
-    <button type="button" class="is-ghost" data-mb-ea="open">Ouvrir</button>`;
+    <button type="button" data-mb-ea="snipe">Snipe this search</button>
+    <button type="button" class="is-ghost" data-mb-ea="open">Open</button>`;
   bar.addEventListener("click", (event) => {
     const button = event.target.closest("[data-mb-ea]");
     if (!button) {
@@ -116,16 +116,16 @@ const injectSearchBar = (ctrl) => {
     }
     const snapshot = captureController(currentSearchController || ctrl, true);
     if (!snapshot) {
-      log.warn("Impossible de lire les critères de la recherche EA.");
+      log.warn("Cannot read the EA search criteria.");
       return;
     }
-    // Un filtre déjà configuré n'est jamais écrasé : on en crée un nouveau.
+    // Never overwrite an already configured filter: create a new one.
     const active = getActiveFilter();
     importSnapshot(snapshot, { asNew: !!(active && filterHasTarget(active)) });
     const filter = getActiveFilter();
     log.success(
-      `Recherche EA importée dans « ${filter ? filter.name : "le filtre"} »${
-        filter && filter.maxBuy ? ` · achat max ${formatCoins(filter.maxBuy)}` : " · indique ton prix d'achat max"
+      `EA search imported into “${filter ? filter.name : "the filter"}”${
+        filter && filter.maxBuy ? ` · max buy ${formatCoins(filter.maxBuy)}` : " · enter your max buy price"
       }.`
     );
     showTargetTab();
@@ -164,7 +164,7 @@ const hookMarketSearch = () => {
   return true;
 };
 
-// --------------------------------------- panneau de mise en vente : net + bénéfice
+// --------------------------------------- listing panel: net proceeds + profit
 
 const paintQuickList = () => {
   document.querySelectorAll(".ut-quick-list-panel-view").forEach((panel) => {
@@ -177,7 +177,7 @@ const paintQuickList = () => {
     if (!info) {
       info = document.createElement("div");
       info.className = "mb-tax-info";
-      info.innerHTML = `<span>Net après taxe <b data-mb-net>—</b></span><span>Bénéfice <b data-mb-profit>—</b></span>`;
+      info.innerHTML = `<span>Net after tax <b data-mb-net>—</b></span><span>Profit <b data-mb-profit>—</b></span>`;
       const row = binInput.closest(".panelActionRow") || binInput.parentElement;
       if (row && row.parentNode) {
         row.parentNode.insertBefore(info, row.nextSibling);

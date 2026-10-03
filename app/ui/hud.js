@@ -4,7 +4,7 @@ import { STATUS_LABEL, getState, onStateChange } from "../core/state";
 import { qs, setText } from "./dom";
 import { togglePanel } from "./panel";
 
-// Pastille flottante : état du bot + ouverture du panneau + Démarrer/Stop rapide.
+// Floating badge: bot status, panel access, and quick Start/Stop.
 
 let hud = null;
 let timer = null;
@@ -20,19 +20,19 @@ const paint = () => {
   }
   const running = isRunning();
   const stats = state.stats;
-  setText(qs(hud, "[data-hud-label]"), running ? STATUS_LABEL[status] || "En chasse" : "MagicBuyer");
+  setText(qs(hud, "[data-hud-label]"), running ? STATUS_LABEL[status] || "Sniping" : "MagicBuyer");
   const elapsed = state.startedAt && running ? formatDuration(Date.now() - state.startedAt) : "";
   setText(
     qs(hud, "[data-hud-detail]"),
     running || stats.searches
       ? `🔎 ${stats.searches} · ✅ ${stats.won}${elapsed ? ` · ${elapsed}` : ""}`
-      : "Ouvrir le sniper"
+      : "Open sniper"
   );
   const action = qs(hud, "[data-hud-action]");
   action.disabled = isStopping() && !isFinalizing();
   setText(action, running ? "■" : "▶");
-  action.setAttribute("aria-label", running ? "Arrêter le bot" : "Démarrer le bot");
-  action.title = running ? "Arrêter" : "Démarrer";
+  action.setAttribute("aria-label", running ? "Stop bot" : "Start bot");
+  action.title = running ? "Stop" : "Start";
 };
 
 export const ensureHud = () => {
@@ -48,17 +48,17 @@ export const ensureHud = () => {
     hud.id = "mb-hud";
     hud.dataset.status = "idle";
     hud.innerHTML = `
-      <button type="button" class="mb-hud-main" data-hud-toggle aria-label="Ouvrir MagicBuyer">
+      <button type="button" class="mb-hud-main" data-hud-toggle aria-label="Open MagicBuyer">
         <span class="mb-hud-logo">MB</span>
         <span class="mb-dot"></span>
-        <span class="mb-hud-text"><b data-hud-label>MagicBuyer</b><small data-hud-detail>Ouvrir le sniper</small></span>
+        <span class="mb-hud-text"><b data-hud-label>MagicBuyer</b><small data-hud-detail>Open sniper</small></span>
       </button>
-      <button type="button" class="mb-hud-action" data-hud-action aria-label="Démarrer le bot">▶</button>`;
+      <button type="button" class="mb-hud-action" data-hud-action aria-label="Start bot">▶</button>`;
     document.body.appendChild(hud);
     hud.addEventListener("click", (event) => {
       if (event.target.closest("[data-hud-action]")) {
         if (isRunning()) {
-          stopBot("arrêt manuel", { manual: true });
+          stopBot("manual stop", { manual: true });
         } else if (!startBot()) {
           togglePanel();
         }

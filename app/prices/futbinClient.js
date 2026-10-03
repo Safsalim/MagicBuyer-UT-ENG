@@ -12,8 +12,8 @@ import {
   parseSquadText,
 } from "./futbinParse";
 
-// Accès réseau à FUTBIN : requête directe (avec tes cookies FUTBIN), puis iframe cachée
-// en secours si Cloudflare bloque. Chaque fonction renvoie { ok, … } et ne rejette jamais.
+// FUTBIN network access: direct request (with your FUTBIN cookies), then a hidden iframe
+// fallback if Cloudflare blocks it. Each function returns { ok, … } and never rejects.
 
 export const futbinYear = () => getFutShortYear() || "27";
 
@@ -29,11 +29,11 @@ const IFRAME_GAP = 5000;
 
 let lastRequestAt = 0;
 let lastIframeAt = 0;
-// Requête directe refusée (Cloudflare) : on ne la retente pas pendant 3 min (sauf demande explicite).
+// Direct request rejected (Cloudflare): do not retry for 3 minutes (unless explicitly requested).
 let directPausedUntil = 0;
 export const futbinDirectPausedUntil = () => (directPausedUntil > Date.now() ? directPausedUntil : 0);
 
-// Utilisé par les tests.
+// Used by tests.
 export const resetFutbinClientForTests = () => {
   lastRequestAt = 0;
   lastIframeAt = 0;
@@ -42,13 +42,13 @@ export const resetFutbinClientForTests = () => {
   iframePausedUntil = 0;
 };
 
-// Secours iframe : mis en pause 10 min après 3 échecs d'affilée (FUTBIN refuse souvent l'affichage en iframe).
+// Iframe fallback: paused for 10 minutes after 3 consecutive failures (FUTBIN often blocks framing).
 let iframeFailures = 0;
 let iframePausedUntil = 0;
 
 const waitFor = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
-// Espacement entre deux requêtes FUTBIN, y compris à l'intérieur d'une même lecture (recherche puis page).
+// Space out FUTBIN requests, including within a single fetch (search followed by player page).
 const pace = async () => {
   const wait = lastRequestAt + REQUEST_GAP - Date.now();
   lastRequestAt = Date.now() + Math.max(0, wait);
@@ -97,8 +97,8 @@ const viaIframe = async (url, timeoutMs) => {
   return null;
 };
 
-// Lecture d'une page FUTBIN. Réponses : { ok, text, via } ou { ok: false, notFound | blocked | deferred, status }.
-// options : json, allowIframe (secours par page cachée), forceDirect (retenter la requête directe tout de suite).
+// Fetch a FUTBIN page. Responses: { ok, text, via } or { ok: false, notFound | blocked | deferred, status }.
+// options: json, allowIframe (hidden page fallback), forceDirect (retry the direct request immediately).
 export const fetchFutbinText = async (url, { json = false, allowIframe = true, forceDirect = false } = {}) => {
   if (forceDirect || !futbinDirectPausedUntil()) {
     await pace();
@@ -112,7 +112,7 @@ export const fetchFutbinText = async (url, { json = false, allowIframe = true, f
     }
     const blocked = res.status === 403 || res.status === 429 || res.status === 503 || looksBlocked(res.text);
     if (!blocked) {
-      // Erreur réseau ou serveur : simple échec, réessayé plus tard.
+      // Network or server error: simple failure, retried later.
       return { ok: false, status: res.status };
     }
     directPausedUntil = Date.now() + DIRECT_PAUSE;
@@ -153,8 +153,8 @@ const toLink = (row) => ({
   rating: row.rating,
 });
 
-// Trouve la page FUTBIN d'une carte EA (identifiant exact de la version).
-// « notFound » seulement si FUTBIN a répondu sans la carte ; une erreur réseau est renvoyée telle quelle.
+// Find a FUTBIN page for an EA card (exact version ID).
+// notFound only if FUTBIN responded without the card; return network errors unchanged.
 export const resolveFutbinLink = async ({ definitionId, name, rating }, options = {}) => {
   const id = Number(definitionId) || 0;
   if (!id) {
@@ -180,7 +180,7 @@ export const resolveFutbinLink = async ({ definitionId, name, rating }, options 
   if (exact) {
     return { ok: true, link: toLink(exact) };
   }
-  // Carte de base (identifiant de base = identifiant de la version) : nom + note.
+  // Base card (base ID = version ID): name + rating.
   if ((id & 0xffffff) === id) {
     const wanted = normalizeName(name);
     const sameName = byName.rows.filter((row) => {
@@ -195,7 +195,7 @@ export const resolveFutbinLink = async ({ definitionId, name, rating }, options 
   return { ok: false, notFound: true };
 };
 
-// Prix actuel d'une carte FUTBIN pour la plateforme ("console" ou "pc").
+// Current FUTBIN card price for the platform (console or pc).
 export const fetchFutbinPrice = async (link, platform, options = {}) => {
   const url = absoluteUrl(link.url) || `${FUTBIN_ORIGIN}/${futbinYear()}/player/${link.futbinId}/player`;
   const res = await fetchFutbinText(url, options);
@@ -215,20 +215,20 @@ export const fetchFutbinPrice = async (link, platform, options = {}) => {
 
 export const isFutbinUrl = (url) => /^https:\/\/(?:www\.)?futbin\.com\//i.test(String(url || "").trim());
 
-// Solution SBC / équipe FUTBIN : formation + 11 joueurs (identifiants EA exacts).
+// FUTBIN SBC solution / squad: formation + 11 players (exact EA IDs).
 export const fetchFutbinSquad = async (url) => {
   if (!isFutbinUrl(url)) {
     return { ok: false, invalid: true };
   }
   const target = String(url).trim();
-  // Action de l'utilisateur : la requête directe est retentée même après un refus récent.
+  // User action: retry the direct request even after a recent rejection.
   const res = await fetchFutbinText(target, { forceDirect: true });
   if (!res.ok) {
     return res;
   }
   let parsed = parseSquadText(res.text);
   let via = res.via;
-  // Équipe affichée par JavaScript : la page complète est lue dans l'iframe cachée.
+  // JavaScript-rendered squad: read the full page in the hidden iframe.
   if (!parsed.players.length && via === "direct") {
     const payload = await viaIframe(target, 20000);
     if (payload) {

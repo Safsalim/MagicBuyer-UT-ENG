@@ -19,86 +19,86 @@ import {
   toggleField,
 } from "../fields";
 
-// ------------------------------------------------------------------- Achat
+// ------------------------------------------------------------------- Buy
 
 export const buyPageHtml = () => `
   ${section(
-    "Achat immédiat",
+    "Buy Now",
     grid(
-      numberField({ bind: "s:buy.maxPerSearch", label: "Achats max par recherche", min: 1, max: 5, hint: "1 conseillé : la carte la moins chère est prise en premier." }),
-      numberField({ bind: "s:buy.stopAfterPurchases", label: "Arrêter après", placeholder: "illimité", hint: "achats (0 = illimité)" }),
-      priceField({ bind: "s:buy.coinsReserve", label: "Réserve de coins", hint: "Le bot ne descend jamais sous ce solde." }),
-      numberField({ bind: "s:buy.maxResults", label: "Seuil de résultats", placeholder: "désactivé", hint: "N'achète pas si la recherche renvoie plus de N cartes (prix max trop haut)." }),
-      toggleField({ bind: "s:buy.skipGk", label: "Ignorer les gardiens", wide: true })
+      numberField({ bind: "s:buy.maxPerSearch", label: "Max purchases per search", min: 1, max: 5, hint: "1 recommended: the cheapest card is bought first." }),
+      numberField({ bind: "s:buy.stopAfterPurchases", label: "Stop after", placeholder: "unlimited", hint: "purchases (0 = unlimited)" }),
+      priceField({ bind: "s:buy.coinsReserve", label: "Coin reserve", hint: "The bot never goes below this balance." }),
+      numberField({ bind: "s:buy.maxResults", label: "Result threshold", placeholder: "disabled", hint: "Do not buy if the search returns more than N cards (max price too high)." }),
+      toggleField({ bind: "s:buy.skipGk", label: "Skip goalkeepers", wide: true })
     )
   )}
-  <div class="mb-note">Acheter à un pourcentage du prix FUTBIN (suivi en direct pendant le bot) : choisis « % du prix FUTBIN » dans le bloc Prix de l'onglet Cible, filtre par filtre.</div>
+  <div class="mb-note">To buy at a percentage of the FUTBIN price (tracked live while the bot runs), choose “% of FUTBIN price” in the Target tab's Price section for each filter.</div>
   ${section(
-    "Enchères",
+    "Bids",
     grid(
-      toggleField({ bind: "s:bid.enabled", label: "Enchérir aussi", wide: true, hint: "Enchérit sur les cartes qui expirent bientôt, jusqu'à l'« Enchère max » du filtre." }),
-      rangeField({ bind: "s:bid.expiresWithin", label: "Si fin dans moins de", unit: "M", placeholder: "5M", hint: "S, M ou H (ex. 90S, 5M)" }),
-      numberField({ bind: "s:bid.maxPerSearch", label: "Enchères par recherche", min: 1, max: 5 }),
-      numberField({ bind: "s:bid.searchEvery", label: "Recherche d'enchères toutes les", min: 2, max: 20, hint: "recherches, quand le filtre a aussi un prix d'achat max" }),
-      numberField({ bind: "s:bid.maxActive", label: "Enchères actives max", min: 1, max: 50 }),
-      toggleField({ bind: "s:bid.exact", label: "Enchérir directement au max" }),
-      toggleField({ bind: "s:bid.rebid", label: "Surenchérir si dépassé" }),
-      toggleField({ bind: "s:bid.clearLost", label: "Retirer les enchères perdues du suivi", wide: true })
+      toggleField({ bind: "s:bid.enabled", label: "Also place bids", wide: true, hint: "Bid on cards that expire soon, up to the filter's “Max bid”." }),
+      rangeField({ bind: "s:bid.expiresWithin", label: "If ending within", unit: "M", placeholder: "5M", hint: "S, M, or H (e.g. 90S, 5M)" }),
+      numberField({ bind: "s:bid.maxPerSearch", label: "Bids per search", min: 1, max: 5 }),
+      numberField({ bind: "s:bid.searchEvery", label: "Search for bids every", min: 2, max: 20, hint: "searches, when the filter also has a max buy price" }),
+      numberField({ bind: "s:bid.maxActive", label: "Max active bids", min: 1, max: 50 }),
+      toggleField({ bind: "s:bid.exact", label: "Bid the maximum directly" }),
+      toggleField({ bind: "s:bid.rebid", label: "Rebid when outbid" }),
+      toggleField({ bind: "s:bid.clearLost", label: "Remove lost bids from watch list", wide: true })
     )
   )}
 `;
 
-// ------------------------------------------------------------------- Vente
+// ------------------------------------------------------------------- Sell
 
 export const sellPageHtml = () => `
   ${section(
-    "Après un achat",
+    "After a purchase",
     grid(
       selectField({
         bind: "s:sell.mode",
-        label: "Que faire de la carte ?",
+        label: "What should happen to the card?",
         wide: true,
         options: [
-          ["list", "La mettre en vente automatiquement"],
-          ["transfer", "L'envoyer dans la liste des transferts"],
-          ["none", "La laisser dans les non attribués"],
+          ["list", "List it automatically"],
+          ["transfer", "Send it to the transfer list"],
+          ["none", "Leave it in unassigned items"],
         ],
       }),
       selectField({
         bind: "s:sell.duration",
-        label: "Durée de l'annonce",
-        options: [["1H", "1 heure"], ["3H", "3 heures"], ["6H", "6 heures"], ["12H", "12 heures"], ["1D", "1 jour"], ["3D", "3 jours"]],
+        label: "Listing duration",
+        options: [["1H", "1 hour"], ["3H", "3 hours"], ["6H", "6 hours"], ["12H", "12 hours"], ["1D", "1 day"], ["3D", "3 days"]],
       }),
-      priceField({ bind: "s:sell.minProfit", label: "Bénéfice minimum", hint: "Après taxe EA de 5 %. Sinon la carte n'est pas mise en vente." }),
-      numberField({ bind: "s:sell.maxRating", label: "Ne pas vendre au-dessus de la note", placeholder: "désactivé" })
+      priceField({ bind: "s:sell.minProfit", label: "Minimum profit", hint: "After EA's 5% tax. Otherwise the card is not listed." }),
+      numberField({ bind: "s:sell.maxRating", label: "Do not sell above this rating", placeholder: "disabled" })
     )
   )}
   ${section(
-    "Prix de revente",
+    "Sell price",
     grid(
       selectField({
         bind: "s:sell.priceMode",
-        label: "Prix de revente",
+        label: "Sell price",
         wide: true,
         options: [
-          ["fixed", "Prix fixe"],
-          ["futbin", "% du prix FUTBIN de la carte achetée"],
+          ["fixed", "Fixed price"],
+          ["futbin", "% of the purchased card's FUTBIN price"],
         ],
-        hint: "Chaque filtre peut avoir son propre réglage (onglet Cible).",
+        hint: "Each filter can have its own setting (Target tab).",
       }),
-      priceField({ bind: "s:sell.defaultPrice", label: "Prix de revente par défaut", wide: true, showIf: "s:sell.priceMode=fixed" }),
+      priceField({ bind: "s:sell.defaultPrice", label: "Default sell price", wide: true, showIf: "s:sell.priceMode=fixed" }),
       rangeField({
         bind: "s:sell.futbinPercent",
-        label: "% du prix FUTBIN",
+        label: "% of FUTBIN price",
         unit: null,
         placeholder: "99-100",
         wide: true,
         showIf: "s:sell.priceMode=futbin",
-        hint: "Valeur tirée au hasard dans la plage. Le prix FUTBIN de la version achetée est relu juste après l'achat ; sans prix FUTBIN, la carte va dans la liste des transferts sans être listée.",
+        hint: "Choose a random value within the range. Refresh the purchased version's FUTBIN price immediately after buying; without a FUTBIN price, send the card to the transfer list without listing it.",
       })
     )
   )}
-  <div class="mb-note">La mise en vente passe par le service EA (la carte est d'abord déplacée dans la liste des transferts). Les limites de prix EA sont respectées automatiquement.</div>
+  <div class="mb-note">Listing uses the EA service (the card is first moved to the transfer list). EA price limits are applied automatically.</div>
 `;
 
 // ------------------------------------------------------------------ Timing
@@ -115,147 +115,147 @@ const presetButtons = () =>
     .join("");
 
 export const timingPageHtml = () => `
-  ${section("Profil", `<div class="mb-presets" data-presets>${presetButtons()}</div>`)}
+  ${section("Profile", `<div class="mb-presets" data-presets>${presetButtons()}</div>`)}
   ${section(
-    "Rythme des recherches",
+    "Search pace",
     grid(
-      rangeField({ bind: "s:timing.wait", label: "Temps entre deux recherches", unit: "S", placeholder: "5-9", key: true, wide: true, hint: "En secondes (décimales acceptées, ex. 4.5-7). Mesuré d'une recherche à la suivante." }),
-      numberField({ bind: "s:timing.maxPerMinute", label: "Recherches max / minute", placeholder: "illimité", hint: "Garde-fou anti-blocage." }),
-      rangeField({ bind: "s:timing.afterBuy", label: "Délai après un achat", unit: "S", optional: true, placeholder: "2-4S" })
+      rangeField({ bind: "s:timing.wait", label: "Delay between searches", unit: "S", placeholder: "5-9", key: true, wide: true, hint: "In seconds (decimals allowed, e.g. 4.5-7). Measured from one search to the next." }),
+      numberField({ bind: "s:timing.maxPerMinute", label: "Max searches / minute", placeholder: "unlimited", hint: "Guard against rate limits." }),
+      rangeField({ bind: "s:timing.afterBuy", label: "Delay after a purchase", unit: "S", optional: true, placeholder: "2-4S" })
     )
   )}
   ${section(
-    "Pauses & arrêt",
+    "Pauses & stopping",
     grid(
-      rangeField({ bind: "s:timing.pauseEvery", label: "Pause toutes les", unit: null, optional: true, placeholder: "15-25", hint: "recherches (vide = jamais)" }),
-      rangeField({ bind: "s:timing.pauseFor", label: "Durée de la pause", unit: "S", optional: true, placeholder: "40-80S" }),
-      rangeField({ bind: "s:timing.stopAfter", label: "Arrêt automatique après", unit: "H", optional: true, placeholder: "2-3H", hint: "vide = jamais", wide: true })
+      rangeField({ bind: "s:timing.pauseEvery", label: "Pause every", unit: null, optional: true, placeholder: "15-25", hint: "searches (empty = never)" }),
+      rangeField({ bind: "s:timing.pauseFor", label: "Pause duration", unit: "S", optional: true, placeholder: "40-80S" }),
+      rangeField({ bind: "s:timing.stopAfter", label: "Automatically stop after", unit: "H", optional: true, placeholder: "2-3H", hint: "empty = never", wide: true })
     )
   )}
   ${section(
-    "Fraîcheur des résultats",
+    "Fresh results",
     grid(
       selectField({
         bind: "s:timing.cacheBuster",
-        label: "Anti-cache EA",
+        label: "EA cache busting",
         wide: true,
         options: [
-          ["auto", "Automatique (conseillé, ne rate aucune annonce)"],
-          ["minBuy", "Achat min variable"],
-          ["minBid", "Enchère min variable"],
-          ["off", "Désactivé"],
+          ["auto", "Automatic (recommended, no listings missed)"],
+          ["minBuy", "Vary minimum buy price"],
+          ["minBid", "Vary minimum bid"],
+          ["off", "Disabled"],
         ],
-        hint: "Chaque recherche est différente pour qu'EA renvoie des résultats frais et non une page en cache.",
+        hint: "Each search is different so EA returns fresh results rather than a cached page.",
       }),
-      numberField({ bind: "s:timing.maxPages", label: "Pages parcourues", min: 1, max: 5, hint: "1 suffit avec un prix max serré." }),
-      priceField({ bind: "s:timing.cacheBusterMax", label: "Plafond anti-cache", hint: "Modes achat/enchère min." }),
-      toggleField({ bind: "s:timing.keepAlive", label: "Garder l'onglet actif en arrière-plan", wide: true, hint: "Signal audio inaudible pour que Chrome ne ralentisse pas le bot (icône haut-parleur sur l'onglet)." })
+      numberField({ bind: "s:timing.maxPages", label: "Pages to search", min: 1, max: 5, hint: "1 is enough with a tight max price." }),
+      priceField({ bind: "s:timing.cacheBusterMax", label: "Cache-busting cap", hint: "Minimum buy/bid modes." }),
+      toggleField({ bind: "s:timing.keepAlive", label: "Keep tab active in the background", wide: true, hint: "Inaudible audio signal to prevent Chrome from throttling the bot (speaker icon on the tab)." })
     )
   )}
   ${section(
-    "Erreurs EA",
+    "EA errors",
     grid(
-      rangeField({ bind: "s:errors.cooldown", label: "Pause si EA limite (429/512/521)", unit: "M", placeholder: "4-8M", wide: true }),
-      numberField({ bind: "s:errors.maxCooldowns", label: "Arrêt après N limitations", min: 0, max: 20 }),
-      numberField({ bind: "s:errors.maxConsecutiveFailures", label: "Arrêt après N échecs", min: 1, max: 20 }),
-      textField({ bind: "s:errors.stopCodes", label: "Codes d'arrêt personnalisés", placeholder: "ex. 470, 473", wide: true })
+      rangeField({ bind: "s:errors.cooldown", label: "Pause on EA rate limits (429/512/521)", unit: "M", placeholder: "4-8M", wide: true }),
+      numberField({ bind: "s:errors.maxCooldowns", label: "Stop after N rate limits", min: 0, max: 20 }),
+      numberField({ bind: "s:errors.maxConsecutiveFailures", label: "Stop after N failures", min: 1, max: 20 }),
+      textField({ bind: "s:errors.stopCodes", label: "Custom stop codes", placeholder: "e.g. 470, 473", wide: true })
     ) +
-      `<div class="mb-note is-warn" style="margin-top:8px">Captcha (458), session expirée (401) et marché verrouillé (494) arrêtent toujours le bot immédiatement.</div>`
+      `<div class="mb-note is-warn" style="margin-top:8px">Captcha (458), expired session (401), and locked market (494) always stop the bot immediately.</div>`
   )}
 `;
 
-// ------------------------------------------------------ Liste des transferts
+// ------------------------------------------------------ Transfer list
 
 const transferStatsHtml = () => {
   const transfer = getState().transfer;
   if (!transfer) {
-    return `<p class="mb-empty">Pas encore chargée : clique sur « Actualiser ».</p>`;
+    return `<p class="mb-empty">Not loaded yet: click “Refresh”.</p>`;
   }
   const cell = (label, value) => `<div>${label}<b>${value}</b></div>`;
   return `<div class="mb-stats-list">
-    ${cell("En vente", transfer.active)}
-    ${cell("Vendues", transfer.sold)}
-    ${cell("Invendues", transfer.unsold)}
-    ${cell("Disponibles", transfer.available)}
-    ${cell("Occupation", `${transfer.total}${transfer.capacity ? ` / ${transfer.capacity}` : ""}`)}
-    ${cell("Valeur vendue", formatCoins(transfer.soldValue))}
+    ${cell("Selling", transfer.active)}
+    ${cell("Sold", transfer.sold)}
+    ${cell("Unsold", transfer.unsold)}
+    ${cell("Available", transfer.available)}
+    ${cell("Capacity used", `${transfer.total}${transfer.capacity ? ` / ${transfer.capacity}` : ""}`)}
+    ${cell("Sold value", formatCoins(transfer.soldValue))}
   </div>`;
 };
 
 export const transferPageHtml = () => `
-  ${section("Liste des transferts", `<div data-transfer-stats>${transferStatsHtml()}</div>
+  ${section("Transfer list", `<div data-transfer-stats>${transferStatsHtml()}</div>
     <div class="mb-row" style="margin-top:8px">
-      <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="refresh">Actualiser</button>
-      <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="relist">Relister les invendus (même prix)</button>
-      <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="clear">Vider les vendus</button>
+      <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="refresh">Refresh</button>
+      <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="relist">Relist unsold cards (same price)</button>
+      <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="clear">Clear sold cards</button>
     </div>`)}
   ${section(
-    "Mise en vente au prix FUTBIN",
-    `<p class="mb-hint">Liste les cartes disponibles et invendues de ta liste des transferts au prix FUTBIN du moment (% réglé dans l'onglet Vente, durée de l'onglet Vente).</p>
+    "Listing at FUTBIN prices",
+    `<p class="mb-hint">List available and unsold cards from your transfer list at the current FUTBIN price (percentage and duration from the Sell tab).</p>
      <div class="mb-row" style="margin-top:8px">
-       <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-transfer-action="futbin">Lister au prix FUTBIN</button>
-       <button type="button" class="mb-btn mb-btn-danger mb-btn-sm" data-transfer-action="futbin-stop" hidden>Arrêter</button>
+       <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-transfer-action="futbin">List at FUTBIN prices</button>
+       <button type="button" class="mb-btn mb-btn-danger mb-btn-sm" data-transfer-action="futbin-stop" hidden>Stop</button>
      </div>
      <div data-transfer-futbin></div>`
   )}
   ${section(
-    "Automatique pendant le bot",
+    "Automatic while the bot runs",
     grid(
-      toggleField({ bind: "s:transfer.relistExpired", label: "Relister les invendus", wide: true, hint: "Attention : concerne TOUTES les cartes expirées de la liste." }),
+      toggleField({ bind: "s:transfer.relistExpired", label: "Relist unsold cards", wide: true, hint: "Warning: applies to ALL expired cards in the list." }),
       selectField({
         bind: "s:transfer.relistMode",
-        label: "Prix du relist",
+        label: "Relist price",
         wide: true,
         showIf: "s:transfer.relistExpired=true",
         options: [
-          ["same", "Au même prix"],
-          ["futbin", "Au prix FUTBIN du moment (% de l'onglet Vente)"],
+          ["same", "At the same price"],
+          ["futbin", "At the current FUTBIN price (Sell tab percentage)"],
         ],
-        hint: "Au prix FUTBIN : 5 cartes par passage ; sans prix FUTBIN après 3 min, relist au même prix.",
+        hint: "At FUTBIN prices: 5 cards per pass; without a FUTBIN price after 3 minutes, relist at the same price.",
       }),
-      numberField({ bind: "s:transfer.clearSoldAt", label: "Vider les vendus dès", placeholder: "jamais", hint: "cartes vendues (0 = jamais)" }),
-      numberField({ bind: "s:transfer.checkEvery", label: "Vérifier toutes les", min: 1, max: 100, hint: "recherches" }),
-      toggleField({ bind: "s:transfer.stopWhenFull", label: "Arrêter si la liste est pleine", wide: true })
+      numberField({ bind: "s:transfer.clearSoldAt", label: "Clear sold cards after", placeholder: "never", hint: "sold cards (0 = never)" }),
+      numberField({ bind: "s:transfer.checkEvery", label: "Check every", min: 1, max: 100, hint: "searches" }),
+      toggleField({ bind: "s:transfer.stopWhenFull", label: "Stop if the list is full", wide: true })
     )
   )}
 `;
 
-// ------------------------------------------------------------------ Alertes
+// ------------------------------------------------------------------ Alerts
 
 export const alertsPageHtml = () => `
   ${section(
-    "Son & bureau",
+    "Sound & desktop",
     grid(
-      toggleField({ bind: "s:notify.sound", label: "Sons", hint: "Achat, captcha, arrêt." }),
-      numberField({ bind: "s:notify.volume", label: "Volume (0 à 1)", float: true, min: 0, max: 1 }),
-      toggleField({ bind: "s:notify.desktop", label: "Notifications du navigateur", wide: true, hint: "Pratique quand l'onglet est en arrière-plan." })
+      toggleField({ bind: "s:notify.sound", label: "Sounds", hint: "Purchase, captcha, stop." }),
+      numberField({ bind: "s:notify.volume", label: "Volume (0 to 1)", float: true, min: 0, max: 1 }),
+      toggleField({ bind: "s:notify.desktop", label: "Browser notifications", wide: true, hint: "Useful when the tab is in the background." })
     ) +
       `<div class="mb-row" style="margin-top:8px">
-        <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-sound="buy">Tester : achat</button>
-        <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-sound="alert">Tester : alerte</button>
+        <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-sound="buy">Test: purchase</button>
+        <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-sound="alert">Test: alert</button>
       </div>`
   )}
   ${section(
     "Discord & Telegram",
     grid(
-      textField({ bind: "s:notify.discordWebhook", label: "Webhook Discord", placeholder: "https://discord.com/api/webhooks/…", secret: true, wide: true }),
-      textField({ bind: "s:notify.telegramToken", label: "Token du bot Telegram", placeholder: "123456:ABC…", secret: true, wide: true }),
-      textField({ bind: "s:notify.telegramChatId", label: "Chat ID Telegram", placeholder: "ex. 123456789", wide: true })
+      textField({ bind: "s:notify.discordWebhook", label: "Discord webhook", placeholder: "https://discord.com/api/webhooks/…", secret: true, wide: true }),
+      textField({ bind: "s:notify.telegramToken", label: "Telegram bot token", placeholder: "123456:ABC…", secret: true, wide: true }),
+      textField({ bind: "s:notify.telegramChatId", label: "Telegram chat ID", placeholder: "e.g. 123456789", wide: true })
     ) +
-      `<div class="mb-row" style="margin-top:8px"><button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-notify-test>Envoyer un message de test</button><span class="mb-hint" data-notify-result></span></div>`
+      `<div class="mb-row" style="margin-top:8px"><button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-notify-test>Send test notification</button><span class="mb-hint" data-notify-result></span></div>`
   )}
   ${section(
-    "Quand prévenir ?",
+    "When to notify?",
     grid(
-      toggleField({ bind: "s:notify.onBuy", label: "Achat réussi" }),
-      toggleField({ bind: "s:notify.onFail", label: "Achat raté" }),
-      toggleField({ bind: "s:notify.onList", label: "Mise en vente" }),
-      toggleField({ bind: "s:notify.onStop", label: "Arrêt du bot" })
-    ) + `<p class="mb-hint">Captcha et blocages EA sont toujours signalés.</p>`
+      toggleField({ bind: "s:notify.onBuy", label: "Successful purchase" }),
+      toggleField({ bind: "s:notify.onFail", label: "Missed purchase" }),
+      toggleField({ bind: "s:notify.onList", label: "Listing" }),
+      toggleField({ bind: "s:notify.onStop", label: "Bot stopped" })
+    ) + `<p class="mb-hint">Captchas and EA blocks are always reported.</p>`
   )}
 `;
 
-// ------------------------------------------------------------------ liaisons
+// ------------------------------------------------------------------ bindings
 
 export const bindSettingsPages = (body, refreshAll) => {
   body.addEventListener("click", async (event) => {
@@ -281,10 +281,10 @@ export const bindSettingsPages = (body, refreshAll) => {
     }
     if (target.closest("[data-notify-test]")) {
       const result = qs(body, "[data-notify-result]");
-      result.textContent = "envoi…";
-      const sent = await notifyEvent("test", "🔔 Test MagicBuyer : les notifications fonctionnent.");
+      result.textContent = "sending…";
+      const sent = await notifyEvent("test", "🔔 MagicBuyer test: notifications are working.");
       const ok = sent.filter(Boolean).length;
-      result.textContent = ok ? `${ok} canal(aux) OK` : "aucun canal configuré ou envoi refusé";
+      result.textContent = ok ? `${ok} channel(s) OK` : "no channel configured or sending rejected";
       return;
     }
     const action = target.closest("[data-transfer-action]");
@@ -294,7 +294,7 @@ export const bindSettingsPages = (body, refreshAll) => {
         return;
       }
       if (isRunning() && action.dataset.transferAction !== "refresh") {
-        log.warn("Le bot gère déjà la liste des transferts : arrête-le pour agir manuellement.");
+        log.warn("The bot is already managing the transfer list: stop it to act manually.");
         return;
       }
       if (action.dataset.transferAction === "futbin") {
@@ -315,7 +315,7 @@ export const bindSettingsPages = (body, refreshAll) => {
     if (!toggle) {
       return;
     }
-    // Après le basculement fait par fields.js : on demande la permission si activé.
+    // After fields.js toggles the setting: request permission if enabled.
     setTimeout(async () => {
       if (!getSettings().notify.desktop) {
         return;
@@ -323,37 +323,37 @@ export const bindSettingsPages = (body, refreshAll) => {
       const permission = await requestDesktopPermission();
       if (permission !== "granted") {
         setSetting("notify.desktop", false);
-        log.warn("Notifications du navigateur refusées par Chrome.");
+        log.warn("Browser notifications denied by Chrome.");
         refreshAll();
       }
     }, 0);
   });
 };
 
-// Mise en vente groupée au prix FUTBIN, avec suivi de la progression et bouton Arrêter.
+// Bulk listing at FUTBIN prices, with progress tracking and a Stop button.
 const runFutbinListing = async (body) => {
   const out = qs(body, "[data-transfer-futbin]");
   const startBtn = qs(body, '[data-transfer-action="futbin"]');
   const stopBtn = qs(body, '[data-transfer-action="futbin-stop"]');
-  const task = beginTask("mise en vente FUTBIN");
+  const task = beginTask("FUTBIN listing");
   if (!task) {
     const other = currentTask();
-    out.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">Une autre tâche est en cours (${other ? other.label : "?"}).</div>`;
+    out.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">Another task is in progress (${other ? other.label : "?"}).</div>`;
     return;
   }
   startBtn.disabled = true;
   stopBtn.hidden = false;
   const paint = (report) => {
-    out.innerHTML = `<div class="mb-note" style="margin-top:8px">${report.listed} listée(s) sur ${report.total}${
-      report.skipped ? ` · ${report.skipped} ignorée(s)` : ""
-    }${report.current ? ` · en cours : ${report.current}` : ""}</div>`;
+    out.innerHTML = `<div class="mb-note" style="margin-top:8px">${report.listed} listed out of ${report.total}${
+      report.skipped ? ` · ${report.skipped} skipped` : ""
+    }${report.current ? ` · in progress: ${report.current}` : ""}</div>`;
   };
   try {
     const report = await listTransferAtFutbin({ token: task.token, onProgress: paint });
     paint(report);
-    const text = `${report.listed} carte(s) mise(s) en vente au prix FUTBIN sur ${report.total}` +
-      (report.noPrice ? ` · ${report.noPrice} sans prix FUTBIN` : "") +
-      (report.stopped ? ` · arrêt : ${report.stopped}` : "");
+    const text = `${report.listed} card(s) listed at FUTBIN prices out of ${report.total}` +
+      (report.noPrice ? ` · ${report.noPrice} without a FUTBIN price` : "") +
+      (report.stopped ? ` · stopped: ${report.stopped}` : "");
     out.innerHTML = `<div class="mb-note${report.stopped ? " is-warn" : ""}" style="margin-top:8px">${text}.</div>`;
     log.info(`${text}.`);
   } finally {
@@ -379,25 +379,25 @@ const runTransferAction = async (action) => {
       const summary = market.summarizeTransferList(result.items);
       updateState({ transfer: Object.assign({ capacity: market.pileCapacity("TRANSFER") }, summary) });
     } else {
-      log.warn(`Liste des transferts indisponible : ${result.error.label}.`);
+      log.warn(`Transfer list unavailable: ${result.error.label}.`);
     }
     return;
   }
   if (action === "relist") {
     const result = await market.relistExpired();
     if (result.ok) {
-      log.success("Invendus relistés.");
+      log.success("Unsold cards relisted.");
     } else {
-      log.warn(`Relist impossible : ${result.error.label}.`);
+      log.warn(`Cannot relist: ${result.error.label}.`);
     }
   }
   if (action === "clear") {
     const result = await market.clearSold();
     if (result.ok) {
-      log.success("Cartes vendues retirées de la liste.");
+      log.success("Sold cards removed from the list.");
       await market.refreshCoins();
     } else {
-      log.warn(`Impossible de vider les vendus : ${result.error.label}.`);
+      log.warn(`Cannot clear sold cards: ${result.error.label}.`);
     }
   }
   await runTransferAction("refresh");

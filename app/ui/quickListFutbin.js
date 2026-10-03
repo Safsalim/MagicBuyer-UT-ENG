@@ -5,9 +5,9 @@ import { randomBetween } from "../core/ranges";
 import { getSettings } from "../core/settings";
 import { currentPrice, getPriceRecord, onPriceUpdate, requestPrice, trackPrice } from "../prices/priceService";
 
-// Panneau « Mettre en vente » du web app : prix FUTBIN de la carte + bouton qui remplit les prix
-// (achat immédiat = % FUTBIN de l'onglet Vente, départ = un palier en dessous). La mise en vente
-// reste faite par le bouton EA : tu vois toujours le prix avant de valider.
+// Web app List on Transfer Market panel: FUTBIN card price + button to fill in prices
+// (Buy Now = Sell tab FUTBIN percentage, starting bid = one tier below). Listing
+// is still done using EA's button: you always see the price before confirming.
 
 const ROW = "mb-ql-futbin";
 const FRESH = 60 * 1000;
@@ -34,8 +34,8 @@ const hintOf = (item) => {
   }
 };
 
-// Prix proposé (achat immédiat + départ), ajusté aux limites EA de la carte. Le pourcentage
-// (plage de l'onglet Vente) est tiré une fois par carte pour que le bouton reste stable.
+// Proposed prices (Buy Now + starting bid), adjusted to the card's EA limits. Choose the
+// percentage (Sell tab range) once per card so the button remains stable.
 const proposal = (state) => {
   const reference = currentPrice(state.id, USABLE, "sell");
   if (!reference) {
@@ -76,17 +76,17 @@ const paintRow = (row) => {
   const button = row.querySelector("[data-mb-ql-fill]");
   const offer = proposal(state);
   if (!offer) {
-    info.textContent = record && record.status === "miss" ? "FUTBIN : carte introuvable" : "FUTBIN : lecture du prix…";
+    info.textContent = record && record.status === "miss" ? "FUTBIN: card not found" : "FUTBIN: fetching price…";
     button.disabled = true;
-    button.textContent = "Prix FUTBIN";
+    button.textContent = "FUTBIN price";
     return;
   }
   const age = Math.round((Date.now() - record.fetchedAt) / 60000);
-  info.textContent = `FUTBIN ${formatCoins(offer.reference)}${record.suspect ? " ⚠" : ""} · ${age < 1 ? "à l'instant" : `il y a ${age} min`}`;
+  info.textContent = `FUTBIN ${formatCoins(offer.reference)}${record.suspect ? " ⚠" : ""} · ${age < 1 ? "just now" : `${age} min ago`}`;
   state.offer = offer;
   button.disabled = false;
-  button.textContent = `Remplir : ${formatCoins(offer.buyNow)}`;
-  button.title = `Achat immédiat ${formatCoins(offer.buyNow)} (${Math.round(offer.percent)} % FUTBIN), départ ${formatCoins(offer.start)}. Valide ensuite avec le bouton EA.`;
+  button.textContent = `Fill in: ${formatCoins(offer.buyNow)}`;
+  button.title = `Buy Now ${formatCoins(offer.buyNow)} (${Math.round(offer.percent)} % FUTBIN), starting bid ${formatCoins(offer.start)}. Then confirm using the EA button.`;
 };
 
 const fill = (event) => {
@@ -109,7 +109,7 @@ const swallow = (event) => event.stopPropagation();
 const buildRow = () => {
   const row = document.createElement("div");
   row.className = `panelActionRow ${ROW}`;
-  row.innerHTML = `<span class="mb-ql-info" data-mb-ql-info>FUTBIN…</span><button type="button" class="mb-ql-fill" data-mb-ql-fill>Prix FUTBIN</button>`;
+  row.innerHTML = `<span class="mb-ql-info" data-mb-ql-info>FUTBIN…</span><button type="button" class="mb-ql-fill" data-mb-ql-fill>FUTBIN price</button>`;
   const button = row.querySelector("[data-mb-ql-fill]");
   button.addEventListener("click", fill);
   ["pointerdown", "mousedown", "touchstart", "touchend", "mouseup", "pointerup"].forEach((type) =>

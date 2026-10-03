@@ -3,8 +3,8 @@ import { classify } from "./errors";
 import { itemService, pageGlobal, pile, repositories, services, toPageArray } from "./page";
 import { bumpStat } from "./state";
 
-// Enveloppes autour de services.Item (FC 27) : chaque appel renvoie une Promise
-// { ok, response, error } et compte les requêtes envoyées à EA.
+// Wrappers around services.Item (FC 27): each call returns a Promise
+// { ok, response, error } and counts requests sent to EA.
 
 const now = () =>
   typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -12,7 +12,7 @@ const now = () =>
 const requireItemService = () => {
   const svc = itemService();
   if (!svc) {
-    throw new Error("services.Item introuvable : le web app EA n'est pas prêt");
+    throw new Error("services.Item not found: the EA web app is not ready");
   }
   return svc;
 };
@@ -59,9 +59,9 @@ export const nameOf = (item) => {
       item._staticData ||
       {};
     const known = data.knownAs && data.knownAs !== "---" ? data.knownAs : "";
-    return String(known || data.name || data.lastName || "").trim() || "Carte";
+    return String(known || data.name || data.lastName || "").trim() || "Card";
   } catch (e) {
-    return "Carte";
+    return "Card";
   }
 };
 
@@ -74,7 +74,7 @@ export const isGoalkeeper = (item) => {
   return item && item.preferredPosition === 0;
 };
 
-// Nombre de cartes par page du marché (config EA, 20 par défaut ; EA en demande 1 de plus).
+// Cards per market page (EA config, default 20; EA requests one extra).
 export const marketPageSize = () => {
   try {
     const getAppMain = pageGlobal("getAppMain");
@@ -92,8 +92,8 @@ export const marketPageSize = () => {
   return 20;
 };
 
-// Recherche sur le marché. Le cache client d'EA est vidé à chaque fois,
-// sinon services.Item renvoie la page précédente sans interroger le serveur.
+// Market search. Clear EA's client cache every time,
+// otherwise services.Item returns the previous page without querying the server.
 export const searchMarket = async (criteria, page = 1) => {
   const svc = requireItemService();
   try {
@@ -102,25 +102,25 @@ export const searchMarket = async (criteria, page = 1) => {
     }
   } catch (e) {}
   const started = now();
-  const result = await call("recherche", () => svc.searchTransferMarket(criteria, page));
+  const result = await call("search", () => svc.searchTransferMarket(criteria, page));
   const latency = now() - started;
   const items =
     (result.response && result.response.data && result.response.data.items) || [];
   return Object.assign(result, { items: Array.from(items), latency });
 };
 
-// Achat immédiat ou enchère : EA utilise le même appel bid(item, prix).
+// Buy Now or bid: EA uses the same bid(item, price) call.
 export const bidOnItem = async (item, price) => {
   const svc = requireItemService();
   const started = now();
-  const result = await call("achat", () => svc.bid(item, price), 12000);
+  const result = await call("purchase", () => svc.bid(item, price), 12000);
   return Object.assign(result, { latency: now() - started });
 };
 
 export const listOnMarket = async (item, startPrice, buyNowPrice, durationSeconds) => {
   const svc = requireItemService();
   return call(
-    "mise en vente",
+    "listing",
     () => svc.list(item, startPrice, buyNowPrice, durationSeconds),
     20000
   );
@@ -128,10 +128,10 @@ export const listOnMarket = async (item, startPrice, buyNowPrice, durationSecond
 
 export const moveItem = async (item, pileName) => {
   const svc = requireItemService();
-  return call("déplacement", () => svc.move(item, pile(pileName)), 15000);
+  return call("move", () => svc.move(item, pile(pileName)), 15000);
 };
 
-// Limites de prix EA de la carte (min / max autorisés à la vente).
+// EA card price limits (minimum / maximum allowed sell prices).
 export const fetchPriceLimits = async (item) => {
   const read = () => {
     try {
@@ -154,13 +154,13 @@ export const fetchPriceLimits = async (item) => {
   if (!svc || typeof svc.requestMarketData !== "function") {
     return null;
   }
-  await call("limites de prix", () => svc.requestMarketData(item), 10000);
+  await call("price limits", () => svc.requestMarketData(item), 10000);
   return read();
 };
 
 export const fetchTransferList = async () => {
   const svc = requireItemService();
-  const result = await call("liste des transferts", () => svc.requestTransferItems());
+  const result = await call("transfer list", () => svc.requestTransferItems());
   const items =
     (result.response && result.response.response && result.response.response.items) || [];
   return Object.assign(result, { items: Array.from(items) });
@@ -168,7 +168,7 @@ export const fetchTransferList = async () => {
 
 export const fetchWatchList = async () => {
   const svc = requireItemService();
-  const result = await call("liste de suivi", () => svc.requestWatchedItems());
+  const result = await call("watch list", () => svc.requestWatchedItems());
   const items =
     (result.response && result.response.response && result.response.response.items) || [];
   return Object.assign(result, { items: Array.from(items) });
@@ -179,7 +179,7 @@ export const refreshAuctions = async (items) => {
   if (!items || !items.length) {
     return { ok: true };
   }
-  return call("actualisation enchères", () => svc.refreshAuctions(items));
+  return call("refresh bids", () => svc.refreshAuctions(items));
 };
 
 export const untargetItems = async (items) => {
@@ -187,7 +187,7 @@ export const untargetItems = async (items) => {
   if (!items || !items.length) {
     return { ok: true };
   }
-  return call("retrait suivi", () => svc.untarget(items));
+  return call("remove from watch list", () => svc.untarget(items));
 };
 
 export const relistExpired = async () => {
@@ -197,11 +197,11 @@ export const relistExpired = async () => {
 
 export const clearSold = async () => {
   const svc = requireItemService();
-  return call("vider les vendus", () => svc.clearSoldItems(), 20000);
+  return call("clear sold", () => svc.clearSoldItems(), 20000);
 };
 
-// Cartes possédées (club ou stockage SBC) pour une liste de versions exactes, comme le
-// constructeur d'équipe d'EA (défId + recherche exacte).
+// Owned cards (club or SBC storage) for a list of exact versions, like
+// EA's squad builder (defId + exact search).
 const ownedSearch = async (label, run, definitionIds) => {
   const ids = Array.from(new Set((definitionIds || []).map(Number).filter(Boolean)));
   if (!ids.length) {
@@ -234,7 +234,7 @@ export const searchStorageItems = (definitionIds) => {
   if (!svc || typeof svc.searchStorageItems !== "function") {
     return Promise.resolve({ ok: true, items: [] });
   }
-  return ownedSearch("stockage", (criteria) => svc.searchStorageItems(criteria), definitionIds);
+  return ownedSearch("storage", (criteria) => svc.searchStorageItems(criteria), definitionIds);
 };
 
 export const refreshCoins = async () => {
@@ -270,7 +270,7 @@ export const pileCount = (pileName) => {
   return 0;
 };
 
-// isPileFull d'EA renvoie "plein" tant que la taille de pile n'est pas chargée : on l'ignore alors.
+// EA's isPileFull returns full until pile size is loaded: ignore it then.
 export const isPileFull = (pileName) => {
   try {
     const repo = itemRepository();
@@ -281,7 +281,7 @@ export const isPileFull = (pileName) => {
   return false;
 };
 
-// Résumé de la liste des transferts pour les statistiques.
+// Transfer list summary for statistics.
 export const summarizeTransferList = (items) => {
   const summary = { total: items.length, sold: 0, unsold: 0, active: 0, available: 0, soldValue: 0 };
   items.forEach((item) => {

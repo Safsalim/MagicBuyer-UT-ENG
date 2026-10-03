@@ -9,12 +9,12 @@ import {
   resolveFutbinLink,
 } from "./futbinClient";
 
-// Prix FUTBIN tenus à jour intelligemment :
-// - cibles du bot et achats SBC ("hot") : relus toutes les 60 à 120 s (réglable) ;
-// - cartes affichées à l'écran ("visible") : relues si plus vieilles que ~2 min,
-//   un peu moins souvent si le prix ne bouge pas (jamais au-delà de 6 min) ;
-// - une seule requête FUTBIN à la fois, espacées, et ralentissement automatique si FUTBIN bloque ;
-// - un saut de prix anormal est vérifié une seconde fois avant d'être utilisé par le bot.
+// Keep FUTBIN prices up to date intelligently:
+// - bot targets and SBC purchases (hot): refresh every 60–120 seconds (configurable);
+// - cards displayed on screen (visible): refresh if older than ~2 minutes,
+//   a little less often if the price is unchanged (never more than 6 minutes);
+// - one FUTBIN request at a time, spaced out, with automatic throttling if FUTBIN blocks them;
+// - verify abnormal price jumps a second time before the bot uses them.
 
 const LINKS_KEY = "futbinLinks";
 const PRICES_KEY = "futbinPrices";
@@ -47,7 +47,7 @@ let pumpTimer = null;
 let saveTimer = null;
 let tickTimer = null;
 
-// Prix mémorisés au dernier chargement (affichés avec leur âge).
+// Prices remembered from the last load (displayed with their age).
 (() => {
   const stored = loadJson(PRICES_KEY, {}) || {};
   Object.keys(stored).forEach((key) => {
@@ -106,7 +106,7 @@ const persistSoon = () => {
         };
       });
     saveJson(PRICES_KEY, out);
-    // Liens FUTBIN : les 2 000 plus récents seulement.
+    // FUTBIN links: only the 2,000 most recent.
     const keys = Object.keys(links);
     if (keys.length > 2000) {
       const kept = {};
@@ -124,9 +124,9 @@ const persistSoon = () => {
 
 export const getPriceRecord = (definitionId) => records.get(Number(definitionId)) || null;
 
-// Prix utilisable : connu, pour la bonne plateforme, confirmé il y a moins de maxAgeMs.
-// Pendant la vérification d'un saut de prix, on reste prudent : pour acheter, le plus bas des
-// deux prix ; pour vendre, le plus haut (jamais d'achat trop cher ni de vente bradée sur un prix faux).
+// Usable price: known, for the correct platform, confirmed less than maxAgeMs ago.
+// While verifying a price jump, stay cautious: use the lower of the two prices for buying,
+// the higher for selling (never overpay or undersell because of an incorrect price).
 export const currentPrice = (definitionId, maxAgeMs = 5 * 60 * 1000, use = "display") => {
   const record = getPriceRecord(definitionId);
   if (!record || !record.price || record.platform !== pricePlatform()) {
@@ -150,9 +150,9 @@ export const priceAgeMs = (definitionId) => {
   return record && record.fetchedAt ? Date.now() - record.fetchedAt : Infinity;
 };
 
-// ------------------------------------------------------------- abonnement
+// ------------------------------------------------------------- subscription
 
-// Déclare l'intérêt pour une carte. kind : "hot" (bot, achat SBC) ou "visible" (étiquette).
+// Register interest in a card. kind: hot (bot, SBC purchasing) or visible (badge).
 export const trackPrice = (definitionId, hint, kind = "visible") => {
   const id = Number(definitionId) || 0;
   if (!id) {
@@ -181,7 +181,7 @@ export const trackPrice = (definitionId, hint, kind = "visible") => {
   };
 };
 
-// Demande explicite (ex. mise en vente) : résout le record une fois la lecture faite.
+// Explicit request (e.g. listing): resolve the record once fetching is complete.
 export const requestPrice = (definitionId, hint) => {
   const id = Number(definitionId) || 0;
   if (!id) {
@@ -209,7 +209,7 @@ const settle = (id) => {
   list.forEach((resolve) => resolve(record));
 };
 
-// ------------------------------------------------------------- planification
+// ------------------------------------------------------------- scheduling
 
 const hotInterval = () => Math.min(120, Math.max(60, Number(settings().hotInterval) || 90)) * 1000;
 const visibleInterval = () => Math.min(600, Math.max(60, Number(settings().visibleInterval) || 120)) * 1000;
@@ -223,7 +223,7 @@ const dueIn = (id, entry, now) => {
     return 0;
   }
   if (record.suspect) {
-    // Saut de prix en attente de confirmation : revérifié très vite, quel que soit l'usage.
+    // Price jump awaiting confirmation: recheck very soon, regardless of usage.
     return Math.max(0, SUSPECT_RECHECK - (now - record.suspect.at));
   }
   const age = now - record.fetchedAt;
@@ -340,17 +340,17 @@ const markSuccess = () => {
 const baseRecord = (id) =>
   records.get(id) || { definitionId: id, price: 0, prices: [], fetchedAt: 0, unchanged: 0, failures: 0, suspect: null };
 
-const BLOCKED_MESSAGE = "FUTBIN demande une vérification (Cloudflare) : onglet FUTBIN → « Ouvrir futbin.com »";
+const BLOCKED_MESSAGE = "FUTBIN requires verification (Cloudflare): FUTBIN tab → “Open futbin.com”";
 
 const setRecord = (id, record, patch) => {
   records.set(id, Object.assign(record, patch));
   emit(id);
 };
 
-// Échec d'une lecture : réessai adapté à la cause (jamais « introuvable » pour une simple erreur réseau).
+// Fetch failure: retry according to the cause (never not found for a simple network error).
 const handleFailure = (id, record, result, now, link) => {
   if (result.deferred) {
-    // Requête directe refusée récemment : les cartes affichées attendent sans rien envoyer.
+    // Direct request recently rejected: displayed cards wait without sending requests.
     setRecord(id, record, { status: "paused", nextRetryAt: Math.max(futbinDirectPausedUntil(), now + ERROR_RETRY) });
   } else if (result.blocked) {
     markBlocked(BLOCKED_MESSAGE);
@@ -367,7 +367,7 @@ const processJob = async (job) => {
   const id = job.id;
   const now = Date.now();
   const record = baseRecord(id);
-  // La page FUTBIN cachée (secours) est réservée au bot, aux DCE et aux demandes explicites.
+  // Hidden FUTBIN page fallback is reserved for the bot, SBCs, and explicit requests.
   const options = { allowIframe: job.priority !== PRIORITY.visible };
   let link = links[id];
   if (link && link.miss && link.until > now) {
@@ -403,7 +403,7 @@ const processJob = async (job) => {
     }
     return;
   }
-  // La page lue doit être celle de la carte demandée (identifiant EA déclaré par FUTBIN, s'il existe).
+  // The fetched page must match the requested card (EA ID declared by FUTBIN, if present).
   if (result.pageEaId && result.pageEaId !== id && (result.pageEaId & 0xffffff) !== (id & 0xffffff)) {
     delete links[id];
     persistSoon();
@@ -417,7 +417,7 @@ const processJob = async (job) => {
 const applyPrice = (id, record, result, link, platform) => {
   const now = Date.now();
   const guard = Math.max(5, Number(settings().jumpGuard) || 35);
-  // Un prix vieux de plus de 30 min (ex. rechargé au démarrage) ne sert pas de référence au garde-fou.
+  // A price older than 30 minutes (e.g. reloaded on startup) cannot serve as the jump guard reference.
   const previous = record.platform === platform && now - (record.fetchedAt || 0) < STALE_GUARD ? record.price : 0;
   const next = result.price;
   const jump = previous ? (Math.abs(next - previous) / previous) * 100 : 0;
@@ -425,8 +425,8 @@ const applyPrice = (id, record, result, link, platform) => {
     const suspect = record.suspect;
     const confirmed = suspect && Math.abs(next - suspect.price) / suspect.price <= 0.1;
     if (!confirmed) {
-      // Saut anormal : le prix confirmé et son âge sont conservés (il vieillit normalement),
-      // le nouveau prix est revérifié dans 20 s avant d'être adopté.
+      // Abnormal jump: preserve the confirmed price and its age (it ages normally),
+      // recheck the new price in 20 seconds before adopting it.
       setRecord(id, record, { status: "ok", failures: 0, nextRetryAt: 0, url: link.url, suspect: { price: next, at: now } });
       persistSoon();
       return;
@@ -452,8 +452,8 @@ const applyPrice = (id, record, result, link, platform) => {
   persistSoon();
 };
 
-// Prix lu ailleurs sur FUTBIN (ex. JSON d'une page d'équipe) : même traitement qu'une lecture de la
-// page joueur (garde-fou compris). Le lien FUTBIN fourni évite une recherche au prochain rafraîchissement.
+// Price read elsewhere on FUTBIN (e.g. squad page JSON): same handling as the
+// player page (including jump guard). The supplied FUTBIN link avoids searching on the next refresh.
 export const seedFutbinPrice = (definitionId, { price, platform, link }) => {
   const id = Number(definitionId) || 0;
   if (!id) {
@@ -468,7 +468,7 @@ export const seedFutbinPrice = (definitionId, { price, platform, link }) => {
   }
   const record = baseRecord(id);
   if (record.fetchedAt && Date.now() - record.fetchedAt < 30 * 1000 && record.platform === platform) {
-    return; // lecture plus récente de la page joueur
+    return; // more recent player page fetch
   }
   const target = links[id] && !links[id].miss ? links[id] : { url: record.url || "", name: record.name || "" };
   applyPrice(id, record, { price: Number(price), prices: [Number(price)], updatedAgoSec: null }, target, platform);
@@ -479,14 +479,14 @@ export const clearFutbinCache = () => {
   records.clear();
   const pending = Array.from(queue.keys());
   queue.clear();
-  // Les demandes en attente sont résolues (sans prix) plutôt que laissées sans réponse.
+  // Resolve pending requests (without a price) rather than leave them unanswered.
   pending.forEach((id) => settle(id));
   saveJson(LINKS_KEY, links);
   saveJson(PRICES_KEY, {});
   interest.forEach((entry, id) => emit(id));
 };
 
-// Utilisé par les tests.
+// Used by tests.
 export const resetPriceServiceForTests = () => {
   resetFutbinClientForTests();
   links = {};

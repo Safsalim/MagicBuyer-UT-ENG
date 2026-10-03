@@ -9,8 +9,8 @@ import { getSettings } from "./settings";
 import { recordTransaction } from "./state";
 import { currentPrice, requestPrice } from "../prices/priceService";
 
-// Mise en vente groupée de la liste des transferts au prix FUTBIN du moment
-// (% de l'onglet Vente) : cartes disponibles et, au choix, invendues.
+// Bulk listing of transfer list cards at the current FUTBIN price
+// (percentage from the Sell tab): available cards and, optionally, unsold cards.
 
 const USABLE = 10 * 60 * 1000;
 
@@ -24,7 +24,7 @@ const safeCall = (target, method) => {
 
 const isPlayer = (item) => safeCall(item, "isPlayer");
 
-// Carte listable : pas en vente, pas vendue ; les invendues seulement si demandé.
+// A card can be listed if it is neither selling nor sold; include unsold cards only when requested.
 const listable = (item, includeExpired) => {
   if (!isPlayer(item)) {
     return false;
@@ -49,7 +49,7 @@ export const listTransferAtFutbin = async ({ token, includeExpired = true, onPro
   const report = { total: 0, listed: 0, skipped: 0, noPrice: 0, stopped: "" };
   const list = await market.fetchTransferList();
   if (!list.ok) {
-    report.stopped = `liste des transferts indisponible (${list.error.label})`;
+    report.stopped = `transfer list unavailable (${list.error.label})`;
     return report;
   }
   const items = list.items.filter((item) => listable(item, includeExpired));
@@ -59,7 +59,7 @@ export const listTransferAtFutbin = async ({ token, includeExpired = true, onPro
   const duration = durationSeconds(sell.duration);
   for (let index = 0; index < items.length; index += 1) {
     if (token.cancelled) {
-      report.stopped = "arrêt demandé";
+      report.stopped = "stop requested";
       break;
     }
     const item = items[index];
@@ -75,7 +75,7 @@ export const listTransferAtFutbin = async ({ token, includeExpired = true, onPro
     if (!reference) {
       report.noPrice += 1;
       report.skipped += 1;
-      log.warn(`${name} : prix FUTBIN indisponible, carte laissée telle quelle.`);
+      log.warn(`${name} : FUTBIN price unavailable, card left unchanged.`);
       continue;
     }
     const { price } = futbinSellPrice(reference, sell.futbinPercent);
@@ -83,11 +83,11 @@ export const listTransferAtFutbin = async ({ token, includeExpired = true, onPro
     const result = await market.listOnMarket(item, listing.start, listing.buyNow, duration);
     if (result.ok) {
       report.listed += 1;
-      log.success(`Mis en vente : ${name} à ${formatCoins(listing.buyNow)} (FUTBIN ${formatCoins(reference)}).`);
-      recordTransaction({ type: "mise en vente FUTBIN", name, rating: market.ratingOf(item), price: listing.buyNow });
+      log.success(`Listed: ${name} at ${formatCoins(listing.buyNow)} (FUTBIN ${formatCoins(reference)}).`);
+      recordTransaction({ type: "FUTBIN listing", name, rating: market.ratingOf(item), price: listing.buyNow });
     } else {
       report.skipped += 1;
-      log.warn(`Mise en vente de ${name} refusée : ${result.error.label}.`);
+      log.warn(`Listing ${name} rejected: ${result.error.label}.`);
       if (stopsTask(result.error)) {
         report.stopped = result.error.label;
         break;
