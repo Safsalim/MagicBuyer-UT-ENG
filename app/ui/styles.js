@@ -73,7 +73,7 @@ export const STYLES = `
   opacity: 0.45;
   cursor: not-allowed;
 }
-/* ---------------- en-tête */
+/* ---------------- header */
 #mb-root .mb-head {
   display: flex;
   align-items: center;
@@ -120,7 +120,7 @@ export const STYLES = `
 #mb-root .mb-icon-btn:hover {
   background: rgba(255,255,255,0.13);
 }
-/* ---------------- état + commandes */
+/* ---------------- status + controls */
 #mb-root .mb-bar {
   display: flex;
   align-items: center;
@@ -225,7 +225,7 @@ export const STYLES = `
 }
 #mb-root .mb-kpi.is-good strong { color: var(--mb-ok); }
 #mb-root .mb-kpi.is-bad strong { color: #ff8e99; }
-/* ---------------- prochaine recherche */
+/* ---------------- next search */
 #mb-root .mb-next {
   margin: 8px 14px 0;
   position: relative;
@@ -252,7 +252,7 @@ export const STYLES = `
   text-overflow: ellipsis;
   padding: 0 8px;
 }
-/* ---------------- onglets */
+/* ---------------- tabs */
 #mb-root .mb-tabs {
   display: flex;
   gap: 4px;
@@ -280,7 +280,7 @@ export const STYLES = `
 }
 #mb-root .mb-page { display: none; }
 #mb-root .mb-page.is-active { display: block; }
-/* ---------------- champs */
+/* ---------------- fields */
 #mb-root .mb-section {
   margin: 0 0 12px;
 }
@@ -446,7 +446,7 @@ export const STYLES = `
 #mb-root .mb-preset b { display: block; font-size: 13px; }
 #mb-root .mb-preset small { display: block; margin-top: 3px; font-size: 10.5px; line-height: 1.3; color: var(--mb-muted); }
 #mb-root .mb-preset.is-active { border-color: rgba(111,245,207,0.55); background: rgba(111,245,207,0.1); }
-/* ---------------- filtres */
+/* ---------------- filters */
 #mb-root .mb-filter-list {
   display: flex;
   flex-direction: column;
@@ -563,7 +563,7 @@ export const STYLES = `
   color: var(--mb-muted);
 }
 #mb-root .mb-stats-list b { display: block; font-size: 15px; color: var(--mb-text); font-variant-numeric: tabular-nums; }
-/* ---------------- journal */
+/* ---------------- log */
 #mb-root .mb-log {
   flex: 0 0 auto;
   height: var(--mb-log-h, 34vh);
@@ -624,7 +624,7 @@ export const STYLES = `
 #mb-root .mb-log-entry.t-warning p { color: #ffd98a; }
 #mb-root .mb-log-entry.t-error { background: rgba(255,93,108,0.08) !important; }
 #mb-root .mb-log-entry.t-error p { color: #ffadb5; }
-/* ---------------- HUD flottant */
+/* ---------------- floating HUD */
 #mb-hud {
   position: fixed;
   right: 16px;
@@ -674,7 +674,7 @@ body.mb-open #mb-hud { display: none; }
   border-left: 1px solid rgba(255,255,255,0.08);
 }
 #mb-hud .mb-hud-action:hover { background: rgba(255,255,255,0.12); }
-/* ---------------- intégrations EA */
+/* ---------------- EA integrations */
 .ut-tab-bar-item.mb-native-tab { position: relative; }
 .ut-tab-bar-item.mb-native-tab span { color: #6ff5cf !important; }
 .ut-tab-bar-item.mb-native-tab::before {
@@ -726,7 +726,7 @@ body.mb-open #mb-hud { display: none; }
 }
 .mb-tax-info b { color: #6ff5cf; }
 .mb-tax-info b.is-neg { color: #ff8e99; }
-/* ---------------- étiquettes FUTBIN sur les cartes EA */
+/* ---------------- FUTBIN badges on EA cards */
 .mb-card-rel { position: relative; }
 .mb-card-price {
   position: absolute !important;
@@ -758,7 +758,7 @@ body.mb-open #mb-hud { display: none; }
 .mb-card-price.is-suspect { color: #ffb020; border-color: rgba(255,176,32,0.6); }
 .mb-card-price:hover { background: rgba(8,14,22,0.95); }
 .large > .mb-card-price, .mb-card-price.is-large { font-size: 12.5px; padding: 2px 9px; }
-/* ---------------- panneau « Mettre en vente » */
+/* ---------------- List on Transfer Market panel */
 .mb-ql-futbin {
   display: flex;
   align-items: center;
@@ -782,7 +782,7 @@ body.mb-open #mb-hud { display: none; }
   background: linear-gradient(135deg, #6ff5cf, #3fd9e8);
 }
 .mb-ql-futbin .mb-ql-fill:disabled { opacity: 0.5; cursor: default; }
-/* ---------------- DCE : bouton et fenêtre « Solution FUTBIN » */
+/* ---------------- SBC: FUTBIN Solution button and dialog */
 #mb-sbc-fab {
   position: fixed;
   top: 12px;

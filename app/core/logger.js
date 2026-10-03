@@ -19,4 +19,4 @@ export const log = {
 };
 
 export const errorMessage = (e) =>
-  (e && (e.message || e.statusText || e.status)) || String(e || "erreur inconnue");
+  (e && (e.message || e.statusText || e.status)) || String(e || "unknown error");

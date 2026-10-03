@@ -3,9 +3,9 @@ import { formatCoins } from "../core/prices";
 import { getSettings, onSettingsChange } from "../core/settings";
 import { currentPrice, getPriceRecord, onPriceUpdate, trackPrice } from "../prices/priceService";
 
-// Étiquette de prix FUTBIN en haut de chaque carte joueur rendue par le web app (club, marché,
-// transferts, équipe, DCE…). Seules les cartes visibles à l'écran sont suivies ; le prix se met
-// à jour tout seul quand FUTBIN change. Clic sur l'étiquette = page FUTBIN de la carte.
+// FUTBIN price badge at the top of every player card rendered by the web app (club, market,
+// transfers, squad, SBCs…). Track only cards visible on screen; the price updates
+// automatically when FUTBIN changes. Click the badge to open the card's FUTBIN page.
 
 const BADGE = "mb-card-price";
 const DISPLAY_MAX_AGE = 60 * 60 * 1000;
@@ -24,7 +24,7 @@ const call = (target, method) => {
   }
 };
 
-// Carte joueur échangeable ou non, hors concepts et prêts.
+// Tradeable or untradeable player card, excluding concepts and loans.
 const eligibleId = (item) => {
   if (!item || !call(item, "isValid") || !call(item, "isPlayer") || item.concept || call(item, "isLimitedUse")) {
     return 0;
@@ -60,12 +60,12 @@ export const shortCoins = (value) => {
 const ago = (timestamp) => {
   const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
   if (seconds < 60) {
-    return `${seconds} s`;
+    return `${seconds} s ago`;
   }
   if (seconds < 3600) {
-    return `${Math.round(seconds / 60)} min`;
+    return `${Math.round(seconds / 60)} min ago`;
   }
-  return `${Math.round(seconds / 3600)} h`;
+  return `${Math.round(seconds / 3600)} h ago`;
 };
 
 const openFutbin = (event) => {
@@ -92,7 +92,7 @@ const createBadge = (root) => {
   return badge;
 };
 
-// L'étiquette est positionnée par rapport à la carte : on ne touche au style EA que si besoin.
+// Position the badge relative to the card: change EA styles only when necessary.
 const ensurePositioned = (root) => {
   if (root.__mbPositioned || !root.isConnected) {
     return;
@@ -130,11 +130,11 @@ const paint = (root, state) => {
   badge.classList.toggle("is-suspect", suspect);
   badge.classList.toggle("is-stale", !!(price && record && Date.now() - record.fetchedAt > 10 * 60 * 1000));
   badge.title = price
-    ? `FUTBIN ${formatCoins(price)} · lu il y a ${ago(record.fetchedAt)}` +
-      (record.updatedAgoSec ? ` (mis à jour par FUTBIN il y a ${ago(record.fetchedAt - record.updatedAgoSec * 1000)})` : "") +
-      (suspect ? ` · saut à ${formatCoins(record.suspect.price)} en vérification` : "") +
-      " · clic : page FUTBIN"
-    : "Prix FUTBIN en cours de lecture…";
+    ? `FUTBIN ${formatCoins(price)} · fetched ${ago(record.fetchedAt)}` +
+      (record.updatedAgoSec ? ` (updated by FUTBIN ${ago(record.fetchedAt - record.updatedAgoSec * 1000)})` : "") +
+      (suspect ? ` · jump to ${formatCoins(record.suspect.price)} being verified` : "") +
+      " · click: FUTBIN page"
+    : "Fetching FUTBIN price…";
 };
 
 const index = (id, root, add) => {
@@ -203,7 +203,7 @@ const ensureObserver = () => {
   return observer;
 };
 
-// Cartes retirées de la page : on arrête leur suivi.
+// Cards removed from the page: stop tracking them.
 const sweep = () => {
   byId.forEach((roots) => {
     Array.from(roots).forEach((root) => {

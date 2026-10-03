@@ -2,8 +2,8 @@ import { loadJson, saveJson } from "./storage";
 
 export const TIMING_PRESETS = {
   prudent: {
-    label: "Prudent",
-    hint: "Rythme lent, pauses longues : le moins risqué pour le compte.",
+    label: "Cautious",
+    hint: "Slow pace, long pauses: lowest risk for your account.",
     values: {
       wait: "8-14",
       maxPerMinute: 6,
@@ -14,7 +14,7 @@ export const TIMING_PRESETS = {
   },
   normal: {
     label: "Normal",
-    hint: "Bon compromis entre réactivité et discrétion.",
+    hint: "A balance between responsiveness and discretion.",
     values: {
       wait: "5-9",
       maxPerMinute: 10,
@@ -24,8 +24,8 @@ export const TIMING_PRESETS = {
     },
   },
   rapide: {
-    label: "Rapide",
-    hint: "Snipe très réactif, mais captchas et blocages EA plus fréquents.",
+    label: "Fast",
+    hint: "Very responsive sniping, but more frequent captchas and EA blocks.",
     values: {
       wait: "3-5",
       maxPerMinute: 15,

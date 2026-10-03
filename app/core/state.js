@@ -1,4 +1,4 @@
-// État d'exécution partagé entre le moteur et l'interface (non persistant).
+// Runtime state shared between the engine and interface (not persisted).
 
 export const STATUS = {
   IDLE: "idle",
@@ -12,14 +12,14 @@ export const STATUS = {
 };
 
 export const STATUS_LABEL = {
-  idle: "À l'arrêt",
-  starting: "Démarrage…",
-  running: "En chasse",
-  paused: "En pause",
-  "auto-pause": "Pause auto",
-  cooldown: "Pause de sécurité",
-  stopping: "Arrêt en cours…",
-  stopped: "Arrêté",
+  idle: "Idle",
+  starting: "Starting…",
+  running: "Sniping",
+  paused: "Paused",
+  "auto-pause": "Auto pause",
+  cooldown: "Safety pause",
+  stopping: "Stopping…",
+  stopped: "Stopped",
 };
 
 const emptyStats = () => ({
@@ -104,7 +104,7 @@ export const onStateChange = (fn) => {
   return () => listeners.delete(fn);
 };
 
-// Recherches sur la dernière minute (fenêtre glissante).
+// Searches over the last minute (sliding window).
 const searchTimes = [];
 
 export const recordSearch = (latencyMs) => {
@@ -130,7 +130,7 @@ export const searchesLastMinute = () => {
 export const lastSearchAt = () =>
   searchTimes.length ? searchTimes[searchTimes.length - 1] : 0;
 
-// ---------------------------------------------------------------- Journal
+// ---------------------------------------------------------------- Log
 
 const MAX_LOGS = 400;
 const logs = [];
@@ -175,7 +175,7 @@ export const onLog = (fn) => {
   return () => logListeners.delete(fn);
 };
 
-// Historique des transactions (export CSV).
+// Transaction history (CSV export).
 const transactions = [];
 
 export const recordTransaction = (entry) => {

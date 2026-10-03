@@ -1,142 +1,143 @@
-# MagicBuyer-UT — sniper pour le web app EA FC 27
+# MagicBuyer-UT — sniper for the EA FC 27 web app
 
-Script Tampermonkey qui ajoute un sniper / autobuyer au web app **EA SPORTS FC 27 Ultimate Team** :
-recherche en boucle sur le marché des transferts, achat immédiat des cartes sous ton prix max (fixe ou
-au % du prix FUTBIN suivi en direct), mise en vente automatique au prix FUTBIN, prix FUTBIN sur chaque
-carte, import des solutions FUTBIN dans les DCE avec achat des joueurs manquants, pauses et arrêts configurables.
+A Tampermonkey script that adds a sniper / autobuyer to the **EA SPORTS FC 27 Ultimate Team** web app:
+continuous transfer market searches, instant purchases below your maximum price (fixed or a percentage
+of the live FUTBIN price), automatic listing at FUTBIN prices, FUTBIN prices on every card, importing
+FUTBIN SBC solutions and buying missing players, and configurable pauses and stopping conditions.
 
-> ⚠️ **À lire avant d'utiliser.** L'automatisation du web app est contraire aux conditions d'utilisation d'EA.
-> EA peut restreindre l'accès au marché des transferts (soft ban), demander des captchas, voire bannir le compte.
-> Utilise ce script à tes risques ; les auteurs ne sont pas responsables d'une sanction sur ton compte.
+> ⚠️ **Read before using.** Automating the web app violates EA's terms of service.
+> EA may restrict transfer market access (soft ban), require captchas, or ban your account.
+> Use this script at your own risk; the authors are not responsible for sanctions against your account.
 
 ## Installation
 
-1. Installe [Tampermonkey](https://www.tampermonkey.net/) sur Chrome, Edge ou Brave.
-   Sur Chrome récent, active **« Autoriser les scripts utilisateur »** dans les détails de l'extension Tampermonkey.
-2. Ouvre `fut-auto-buyer.user.js` depuis la [dernière release](https://github.com/AMINE1921/MagicBuyer-UT/releases/latest) et clique sur **Installer**.
-3. Ouvre le [web app FC 27](https://www.ea.com/ea-sports-fc/ultimate-team/web-app/) et connecte-toi.
+1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome, Edge, or Brave.
+   On recent Chrome versions, enable **“Allow user scripts”** in Tampermonkey's extension details.
+2. Open `fut-auto-buyer.user.js` from the [latest release](https://github.com/AMINE1921/MagicBuyer-UT/releases/latest) and click **Install**.
+3. Open the [FC 27 web app](https://www.ea.com/ea-sports-fc/ultimate-team/web-app/) and log in.
 
-Le marché des transferts doit être débloqué sur ton compte.
+Your account must have transfer market access unlocked.
 
-## Démarrage rapide
+## Quick start
 
-1. Clique sur l'onglet **MagicBuyer** (barre de navigation EA) ou sur la pastille **MB** en bas à droite.
-2. Onglet **Cible** : tape le nom du joueur et choisis-le dans la liste.
-3. Renseigne le **Prix d'achat max** (achat immédiat) et, si tu veux revendre, le **Prix de revente**
-   (le panneau affiche le net après la taxe EA de 5 % et le bénéfice par carte).
-4. Clique sur **Tester la recherche (sans acheter)** pour voir ce que le marché renvoie (en vert : ce que le bot achèterait).
-5. Clique sur **▶ Démarrer**. Tu peux fermer le panneau : la pastille affiche l'état, les recherches et les achats.
+1. Click the **MagicBuyer** tab (EA navigation bar) or the **MB** badge in the bottom-right corner.
+2. In the **Target** tab, enter the player's name and select them from the list.
+3. Enter the **Max buy price** (Buy Now) and, if you want to resell, the **Sell price**
+   (the panel shows the net proceeds after EA's 5% tax and the profit per card).
+4. Click **Test search (without buying)** to see the market results (green shows what the bot would buy).
+5. Click **▶ Start**. You can close the panel: the badge displays the status, searches, and purchases.
 
-Autre méthode : règle ta recherche dans **Transferts → Marché des transferts** d'EA (rareté, poste, style de jeu…)
-puis clique sur **⚡ Sniper cette recherche** : un filtre est créé avec exactement ces critères.
+Alternatively, configure your search in EA's **Transfers → Transfer Market** (rarity, position, play style…)
+and click **⚡ Snipe this search** to create a filter with exactly those criteria.
 
-## Prix FUTBIN
+## FUTBIN prices
 
-Toutes les fonctions de prix utilisent **FUTBIN** (pages lues comme dans ton navigateur, plateforme console ou PC
-selon ton compte). Onglet **FUTBIN** : bouton **Tester FUTBIN** pour vérifier l'accès.
+All pricing features use **FUTBIN** (pages fetched as in your browser, using the console or PC platform
+for your account). In the **FUTBIN** tab, click **Test FUTBIN** to check access.
 
-- **Achat au % du prix FUTBIN** (onglet Cible → Prix d'achat → Mode) : par exemple 90 % ; le prix d'achat max
-  est recalculé à chaque mise à jour du prix. Un prix fixe peut servir de plafond absolu.
-  Sans prix FUTBIN récent (moins de 5 min), le filtre attend : jamais d'achat sur un prix périmé.
-- **Revente au % du prix FUTBIN** (onglet Vente, ou par filtre) : le prix de la version achetée est relu juste
-  après l'achat. Sans prix FUTBIN, la carte va dans la liste des transferts sans être listée.
-- **Relist au prix FUTBIN** et bouton **Lister au prix FUTBIN** (onglet Transferts) pour les cartes disponibles et invendues.
-- **Étiquette de prix** en haut de chaque carte joueur (club, marché, transferts, équipes, DCE) ; clic = page FUTBIN.
-- **Panneau « Mettre en vente » d'EA** : prix FUTBIN de la carte et bouton **Remplir** (tu valides avec le bouton EA).
+- **Buy at a percentage of FUTBIN price** (Target tab → Buy price → Mode): for example, 90%; the max buy
+  price is recalculated on every price update. A fixed price can serve as an absolute cap.
+  Without a recent FUTBIN price (less than 5 minutes old), the filter waits: never buy using an outdated price.
+- **Sell at a percentage of FUTBIN price** (Sell tab, or per filter): the purchased version's price is refreshed
+  immediately after buying. Without a FUTBIN price, the card goes to the transfer list without being listed.
+- **Relist at FUTBIN prices** and the **List at FUTBIN prices** button (Transfers tab) for available and unsold cards.
+- **Price badge** at the top of every player card (club, market, transfers, squads, SBCs); click to open its FUTBIN page.
+- **EA's listing panel**: the card's FUTBIN price and a **Fill in** button (confirm with EA's button).
 
-Rafraîchissement intelligent : les cibles du bot et les achats DCE sont relus toutes les 60 à 120 s, les cartes
-affichées toutes les ~2 min (moins souvent si le prix ne bouge pas), une seule requête FUTBIN à la fois, espacées,
-ralentissement automatique si FUTBIN bloque, et un saut de prix anormal est vérifié une seconde fois avant d'être utilisé.
-FUTBIN ne pousse pas ses prix : ils sont relus régulièrement tant que la carte est suivie.
+Smart refresh: bot targets and SBC purchases refresh every 60–120 seconds, displayed cards approximately
+every 2 minutes (less often if the price stays the same). FUTBIN requests run one at a time, spaced out,
+with automatic throttling if FUTBIN blocks them. An abnormal price jump is checked a second time before use.
+FUTBIN does not push prices: they are fetched regularly while the card is being tracked.
 
-Si FUTBIN renvoie une vérification Cloudflare, ouvre futbin.com dans un onglet et passe la vérification ;
-le secours « page FUTBIN cachée » (iframe invisible) prend le relais quand la requête directe est refusée.
+If FUTBIN returns a Cloudflare verification page, open futbin.com in a tab and complete the verification;
+the “hidden FUTBIN page” fallback (invisible iframe) takes over when direct requests are rejected.
 
-## DCE : solutions FUTBIN
+## SBCs: FUTBIN solutions
 
-1. Ouvre l'équipe d'un défi (écran avec le terrain) et clique sur **⚡ Solution FUTBIN** en haut de l'écran.
-2. Colle le lien FUTBIN de la solution (page de l'équipe) puis **Charger** : formation, 11 joueurs, ceux de ton club
-   (et du stockage DCE, prêts exclus, non échangeables en priorité) et ceux **à acheter** avec leur prix FUTBIN.
-3. **Placer dans l'équipe** : la formation est appliquée et les joueurs sont placés à un poste où ils sont jouables.
-4. Vérifie ou modifie le **prix max** de chaque manquant (prix FUTBIN + marge réglable), puis **Acheter les manquants** :
-   recherche exacte de la version, la moins chère d'abord, achat, envoi au club et placement dans le défi.
+1. Open a challenge squad (the pitch screen) and click **⚡ FUTBIN Solution** at the top of the screen.
+2. Paste the FUTBIN solution link (squad page), then click **Load** to see the formation, 11 players,
+   those in your club (and SBC storage, excluding loans and prioritizing untradeables), and those
+   **to buy** with their FUTBIN prices.
+3. **Place in squad** applies the formation and places players in positions they can play.
+4. Check or adjust each missing player's **max price** (FUTBIN price + configurable margin), then click
+   **Buy missing players**: exact version search, cheapest first, purchase, send to club, and place in the challenge.
 
-Le défi n'est jamais envoyé automatiquement : c'est toi qui cliques sur « Envoyer ». Captcha, session expirée ou
-limitation EA arrêtent l'achat immédiatement ; le bouton **Stop** l'arrête à tout moment.
+The challenge is never submitted automatically: you click **Submit** yourself. Captchas, expired sessions,
+and EA rate limits stop purchasing immediately; the **Stop** button interrupts it at any time.
 
-## Comment le sniper évite de rater une affaire
+## How the sniper avoids missing deals
 
-- **Résultats frais à chaque recherche** : le cache du web app est vidé et chaque requête est différente
-  (anti-cache « automatique » : l'enchère max varie *au-dessus* de ton prix d'achat max, donc aucune annonce achetable n'est exclue).
-- **Achat immédiat** dès la réponse d'EA, sans attendre FUTBIN ni aucune autre requête.
-- **La moins chère d'abord**, puis la plus récente à prix égal ; tes propres annonces sont ignorées.
-- **Revente après l'achat**, jamais pendant : la recherche suivante n'est pas retardée.
-- **Onglet actif en arrière-plan** : Chrome ralentit les onglets cachés ; l'option « Garder l'onglet actif » l'en empêche
-  (une icône haut-parleur apparaît sur l'onglet, aucun son n'est émis).
+- **Fresh results on every search**: the web app cache is cleared and each request is different
+  (automatic cache busting varies the max bid *above* your max buy price, so no purchasable listing is excluded).
+- **Instant purchase** as soon as EA responds, without waiting for FUTBIN or any other request.
+- **Cheapest first**, then most recent at equal prices; your own listings are ignored.
+- **Reselling after purchases**, never during them: the next search is not delayed.
+- **Keep tab active in the background**: Chrome throttles hidden tabs; the “Keep tab active” option prevents this
+  (a speaker icon appears on the tab, but no sound is played).
 
-## Réglages
+## Settings
 
-| Onglet | Réglages principaux |
+| Tab | Settings |
 | --- | --- |
-| **Cible** | Filtres enregistrés, rotation entre filtres, joueur, qualité, poste, note min/max, prix d'achat (fixe ou % FUTBIN en direct, plafond), revente (onglet Vente, fixe ou % FUTBIN), enchère max, IDs avancés (version exacte, rareté, nation, ligue, club, style). |
-| **Achat** | Achats max par recherche, arrêt après N achats, réserve de coins, seuil de résultats, ignorer les gardiens, enchères (fenêtre de fin, surenchère, enchères actives max). |
-| **Vente** | Mise en vente automatique / envoi en liste des transferts / rien, prix fixe ou % du prix FUTBIN, durée, bénéfice minimum. |
-| **Timing** | Profils Prudent / Normal / Rapide, temps entre recherches, recherches max par minute, pause toutes les N recherches, durée de pause, arrêt automatique, délai après achat, anti-cache, pages parcourues, pause de sécurité sur limitation EA. |
-| **Transferts** | État de la liste, relist des invendus (même prix ou prix FUTBIN), mise en vente groupée au prix FUTBIN, vider les vendus, arrêt si la liste est pleine. |
-| **FUTBIN** | Test d'accès, plateforme des prix, fréquence de rafraîchissement, garde-fou sur les sauts de prix, étiquettes sur les cartes, réglages des achats DCE. |
-| **Alertes** | Sons, notifications du navigateur, webhook Discord, bot Telegram, choix des événements notifiés. |
+| **Target** | Saved filters, filter rotation, player, quality, position, min/max rating, buy price (fixed or live FUTBIN percentage, cap), sell price (Sell tab, fixed or FUTBIN percentage), max bid, advanced IDs (exact version, rarity, nation, league, club, style). |
+| **Buy** | Max purchases per search, stop after N purchases, coin reserve, result threshold, skip goalkeepers, bidding (expiry window, rebidding, max active bids). |
+| **Sell** | Automatic listing / send to transfer list / leave unassigned, fixed price or FUTBIN percentage, duration, minimum profit. |
+| **Timing** | Cautious / Normal / Fast profiles, search delay, max searches per minute, pause every N searches, pause duration, automatic stop, delay after buying, cache busting, pages to search, safety pause on EA rate limits. |
+| **Transfers** | List status, relist unsold cards (same price or FUTBIN price), bulk listing at FUTBIN prices, clear sold cards, stop if the list is full. |
+| **FUTBIN** | Access test, price platform, refresh frequency, price jump guard, card badges, SBC purchasing settings. |
+| **Alerts** | Sounds, browser notifications, Discord webhook, Telegram bot, and event selection. |
 
-Formats acceptés pour les durées : `5-9` (secondes), `4.5-7`, `40-80S`, `5M`, `1-2H`, `1D`.
-Toutes les valeurs sont enregistrées automatiquement (stockage Tampermonkey).
+Accepted duration formats: `5-9` (seconds), `4.5-7`, `40-80S`, `5M`, `1-2H`, `1D`.
+All values are saved automatically in Tampermonkey storage.
 
-### Profils de timing
+### Timing profiles
 
-| Profil | Entre deux recherches | Max / minute | Pause | Arrêt auto |
+| Profile | Between searches | Max / minute | Pause | Automatic stop |
 | --- | --- | --- | --- | --- |
-| Prudent | 8 à 14 s | 6 | 60–120 s toutes les 12–18 recherches | 1–2 h |
-| Normal (défaut) | 5 à 9 s | 10 | 40–80 s toutes les 15–25 recherches | 2–3 h |
-| Rapide | 3 à 5 s | 15 | 30–60 s toutes les 20–30 recherches | 1–1,5 h |
+| Cautious | 8–14 seconds | 6 | 60–120 seconds every 12–18 searches | 1–2 hours |
+| Normal (default) | 5–9 seconds | 10 | 40–80 seconds every 15–25 searches | 2–3 hours |
+| Fast | 3–5 seconds | 15 | 30–60 seconds every 20–30 searches | 1–1.5 hours |
 
-Plus le rythme est rapide, plus EA déclenche vite des captchas et des limitations.
+Faster searches cause EA to trigger captchas and rate limits more frequently.
 
-### Sécurité
+### Safety
 
-- **Captcha (458)**, **session expirée (401)**, **marché verrouillé (494)**, **compte bloqué** : arrêt immédiat + alerte.
-- **Trop de requêtes (429) / blocage temporaire (512, 521)** : pause de sécurité (4 à 8 min par défaut), arrêt si ça se répète.
-- **3 recherches en échec d'affilée** : arrêt.
-- Codes d'erreur personnalisés : onglet Timing → Erreurs EA.
+- **Captcha (458)**, **expired session (401)**, **locked market (494)**, **blocked account**: stop immediately and notify.
+- **Too many requests (429) / temporary block (512, 521)**: safety pause (4–8 minutes by default), stop if repeated.
+- **3 consecutive failed searches**: stop.
+- Custom error codes: Timing tab → EA errors.
 
-Le script ne résout jamais les captchas : résous-le toi-même dans le web app, puis relance.
+The script never solves captchas: solve them yourself in the web app, then restart.
 
-## Compiler depuis les sources
+## Build from source
 
 ```bash
 npm install
 npm run build:prod
 ```
 
-Le script est généré dans `dist/fut-auto-buyer.user.js` (en-tête Tampermonkey dans `tampermonkey-header.js`).
+The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
 
-## Nouveautés 5.1.1
+## What's new in 5.1.1
 
-- DCE : lecture des solutions FUTBIN corrigée (l'équipe est lue dans les données de la page, plus dans l'affichage) :
-  formation, poste exact de chaque joueur comme sur FUTBIN, poste bloqué du défi respecté, prix de la page repris tout de suite.
+- SBCs: fixed FUTBIN solution parsing (the squad is read from page data rather than the rendered display):
+  formation, each player's exact FUTBIN position, locked challenge positions respected, page prices used immediately.
 
-## Nouveautés 5.1.0
+## What's new in 5.1.0
 
-- Achat au % du prix FUTBIN par filtre, avec prix suivi en direct pendant le bot (plafond optionnel).
-- Revente et relist au % du prix FUTBIN, mise en vente groupée de la liste des transferts au prix FUTBIN.
-- Étiquette de prix FUTBIN sur toutes les cartes joueur et bouton « Remplir » dans le panneau de mise en vente d'EA.
-- DCE : import d'une solution FUTBIN (formation + joueurs du club), achat des manquants au prix FUTBIN modifiable.
-- Nouvel onglet FUTBIN (test d'accès, rafraîchissement intelligent, garde-fou sur les sauts de prix).
-- FUTWIZ retiré : FUTBIN sert de source unique. Les anciens réglages « prix de référence » sont convertis automatiquement.
+- Buy at a per-filter percentage of the FUTBIN price, tracked live while the bot runs (optional cap).
+- Sell and relist at a percentage of the FUTBIN price.
+- FUTBIN price badge on every player card and a **Fill in** button in EA's listing panel.
+- SBCs: import FUTBIN solutions (formation + club players), buy missing players at an editable FUTBIN price.
+- New FUTBIN tab (access test, smart refresh, card badges, SBCs).
+- FUTWIZ removed: FUTBIN is the sole price source. Old “reference price” settings are converted automatically.
 
-## Nouveautés 5.0.0
+## What's new in 5.0.0
 
-Réécriture complète du moteur et de l'interface pour FC 27 :
+Complete engine and interface rewrite for FC 27:
 
-- Moteur de snipe réécrit sur les vraies API du web app FC 27 (`UTSearchCriteriaDTO`, `services.Item`), sans réécriture d'URL ni hooks fragiles.
-- Corrige le blocage du bot après le premier achat, l'absence d'arrêt sur captcha, le prix FUTBIN qui remplaçait le prix max,
-  l'anti-cache désactivé sur les joueurs ciblés, les réglages jamais sauvegardés et la boucle de rendu qui chargeait le processeur.
-- Nouveau panneau latéral (le web app reste utilisable), pastille flottante, journal filtrable, export CSV, test de recherche sans achat,
-  import d'une recherche EA, rotation entre plusieurs filtres, profils de timing, enchères, notifications Discord/Telegram.
+- Snipe engine rewritten around the real FC 27 web app APIs (`UTSearchCriteriaDTO`, `services.Item`), without URL rewriting or fragile hooks.
+- Fixed the bot getting stuck after the first purchase, missing captcha stops, FUTBIN prices replacing max prices,
+  cache busting disabled for targeted players, settings never saved, and the CPU-heavy render loop.
+- New side panel (the web app remains usable), floating badge, filterable log, CSV export, search test without buying,
+  EA search import, multi-filter rotation, timing profiles, bidding, and Discord/Telegram notifications.

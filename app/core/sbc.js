@@ -18,9 +18,9 @@ import {
   trackPrice,
 } from "../prices/priceService";
 
-// Défis de création d'équipe (DCE / SBC) : import d'une solution FUTBIN dans l'équipe du défi,
-// puis achat des joueurs manquants au prix FUTBIN (modifiable). Le défi n'est jamais envoyé
-// automatiquement : c'est toujours toi qui cliques sur « Envoyer ».
+// Squad Building Challenges (SBCs): import a FUTBIN solution into the challenge squad,
+// then buy missing players at the FUTBIN price (editable). The challenge is never submitted
+// automatically: you always click Submit yourself.
 
 const FIELD_PLAYERS = 11;
 const TOTAL_PLAYERS = 23;
@@ -34,7 +34,7 @@ const call = (target, method, ...args) => {
   }
 };
 
-// ------------------------------------------------------------------ contexte
+// ------------------------------------------------------------------ context
 
 export const sbcContext = (ctrl) => {
   if (!ctrl) {
@@ -48,7 +48,7 @@ export const sbcContext = (ctrl) => {
   return { ctrl, challenge, squad };
 };
 
-// Postes du défi (11 titulaires) pour la formation actuelle ou une autre formation.
+// Challenge positions (11 starters) for the current or another formation.
 export const readSlots = (squad, formationOverride) => {
   const formation = formationOverride || call(squad, "getFormation") || null;
   const slots = [];
@@ -73,7 +73,7 @@ export const readSlots = (squad, formationOverride) => {
   return { formation, slots };
 };
 
-// Nom d'un poste EA à partir de son identifiant (énumération PlayerPosition du web app : 5 → "CB").
+// EA position name from its ID (web app PlayerPosition enum: 5 → CB).
 const positionName = (typeId) => {
   try {
     const names = pageGlobal("PlayerPosition");
@@ -91,7 +91,7 @@ const digits = (value) => String(value || "").replace(/\D+/g, "");
 export const formationLabel = (formation) =>
   (formation && (formation.displayName || call(formation, "getDisplayName") || formation.name)) || "";
 
-// Formation EA correspondant à la clé FUTBIN ("4-3-3(4)" → "4334").
+// EA formation matching the FUTBIN key (4-3-3(4) → 4334).
 export const findFormation = (key) => {
   if (!key) {
     return null;
@@ -160,7 +160,7 @@ const possiblePositions = (item) => {
   }
 };
 
-// Poste jouable : postes possibles de la carte EA, sinon ceux indiqués par FUTBIN.
+// Playable positions: the EA card's possible positions, otherwise those listed by FUTBIN.
 const fits = (entry, slot) => {
   const positions = entry.item ? possiblePositions(entry.item) : null;
   if (positions) {
@@ -178,8 +178,8 @@ const fits = (entry, slot) => {
   return true;
 };
 
-// Postes possibles d'une entrée : d'abord le poste exact de la solution FUTBIN (même disposition,
-// donc même collectif), sinon les postes où le joueur est jouable.
+// Possible positions for an entry: first the exact FUTBIN solution position (same layout,
+// therefore same chemistry), otherwise positions the player can play.
 const eligibleSlots = (entry, open) => {
   const wanted = normalizePosition(entry.player.slotPosition);
   if (wanted) {
@@ -191,13 +191,13 @@ const eligibleSlots = (entry, open) => {
   return open.filter((slot) => fits(entry, slot)).map((slot) => slot.index);
 };
 
-// Affecte chaque joueur à un poste où il est jouable (couplage maximum) ; les autres
-// prennent les postes restants. Renvoie l'index de poste de chaque entrée (-1 si aucun).
+// Assign each player a playable position (maximum matching); the others
+// take remaining positions. Returns each entry's position index (-1 if none).
 export const planPlacement = (slots, entries) => {
   const open = slots.filter((slot) => !slot.brick);
   const eligible = entries.map((entry) => eligibleSlots(entry, open));
   const owner = new Map();
-  // Premier poste libre d'abord (garde l'ordre de la solution), sinon on déplace un joueur déjà placé.
+  // First free position first (preserve solution order), otherwise move an already placed player.
   const assign = (entryIndex, seen) => {
     const options = eligible[entryIndex];
     const free = options.find((slotIndex) => !owner.has(slotIndex) && !seen.has(slotIndex));
@@ -232,19 +232,19 @@ export const planPlacement = (slots, entries) => {
   return result;
 };
 
-// ------------------------------------------------------------- cartes du club
+// ------------------------------------------------------------- club cards
 
 const betterOwned = (candidate, current) => {
   if (!current) {
     return true;
   }
-  // Non échangeable d'abord (aucune valeur au marché), puis stockage DCE (doublons) avant le club.
+  // Untradeable first (no market value), then SBC storage (duplicates) before the club.
   const rank = (entry) => (entry.item.tradable ? 2 : 0) + (entry.source === "stockage" ? 0 : 1);
   return rank(candidate) < rank(current);
 };
 
-// Cartes possédées (club + stockage DCE) pour les versions exactes demandées. Les prêts sont exclus,
-// ainsi qu'une carte de note inférieure à celle de la solution (autre version du joueur).
+// Owned cards (club + SBC storage) for the requested exact versions. Exclude loans,
+// and cards rated lower than the solution (another player version).
 export const findOwnedItems = async (definitionIds, minRatings = new Map()) => {
   const wanted = Array.from(new Set(definitionIds.map(Number).filter(Boolean)));
   const found = new Map();
@@ -283,11 +283,11 @@ export const findOwnedItems = async (definitionIds, minRatings = new Map()) => {
 
 // ------------------------------------------------------------------- session
 
-// Prix FUTBIN lu en direct (plateforme du compte, moins de 5 min). Le prix affiché sur la page
-// d'équipe FUTBIN n'est qu'indicatif (autre plateforme possible) : jamais utilisé pour acheter.
+// Live FUTBIN price (account platform, less than 5 minutes old). The price shown on the FUTBIN
+// squad page is only indicative (possibly another platform): never use it for purchasing.
 const livePrice = (entry, use = "display") => currentPrice(entry.player.eaId, SBC_PRICE_MAX_AGE, use);
 
-// Prix max d'achat d'un manquant : saisi à la main, sinon prix FUTBIN en direct + marge (0 si inconnu).
+// Missing player's max buy price: entered manually, otherwise live FUTBIN price + margin (0 if unknown).
 export const maxPriceFor = (entry) => {
   if (entry.manual) {
     return floorPrice(entry.maxPrice);
@@ -298,42 +298,42 @@ export const maxPriceFor = (entry) => {
   }
   const margin = Math.max(0, Math.min(50, Number(getSettings().sbc.margin) || 0));
   const computed = floorPrice((price * (100 + margin)) / 100);
-  // Cartes bon marché : avec une marge, au moins un palier EA au-dessus du prix FUTBIN (650 → 700).
+  // Cheap cards: with a margin, use at least one EA tier above the FUTBIN price (650 → 700).
   return margin > 0 && computed <= price ? priceAbove(price) : computed;
 };
 
-// Prix affiché dans l'aperçu : FUTBIN en direct, sinon celui de la page d'équipe (indicatif).
+// Preview price: live FUTBIN, otherwise the squad page price (indicative).
 export const entryPrice = (entry) => livePrice(entry) || toInt(entry.player.price) || 0;
 
-// Charge une solution FUTBIN pour le défi ouvert : joueurs, formation, cartes déjà possédées.
+// Load a FUTBIN solution for the open challenge: players, formation, already owned cards.
 export const loadSolution = async (ctrl, url) => {
   const ctx = sbcContext(ctrl);
   if (!ctx) {
-    return { ok: false, message: "Ouvre l'équipe du défi (écran avec le terrain) avant d'importer." };
+    return { ok: false, message: "Open the challenge squad (pitch screen) before importing." };
   }
   const res = await fetchFutbinSquad(url);
   if (!res.ok) {
     if (res.invalid) {
-      return { ok: false, message: "Colle un lien futbin.com (page de la solution / de l'équipe)." };
+      return { ok: false, message: "Paste a futbin.com link (solution / squad page)." };
     }
     if (res.blocked) {
-      return { ok: false, message: "FUTBIN bloque la requête (Cloudflare) : ouvre futbin.com dans un onglet puis réessaie." };
+      return { ok: false, message: "FUTBIN is blocking the request (Cloudflare): open futbin.com in a tab, then try again." };
     }
     if (res.empty) {
-      return { ok: false, message: "Aucun joueur trouvé sur cette page FUTBIN (lien de solution ou d'équipe attendu)." };
+      return { ok: false, message: "No players found on this FUTBIN page (expected a solution or squad link)." };
     }
     if (res.notFound) {
-      return { ok: false, message: "Page FUTBIN introuvable (404)." };
+      return { ok: false, message: "FUTBIN page not found (404)." };
     }
-    return { ok: false, message: `FUTBIN ne répond pas${res.status ? ` (${res.status})` : ""}.` };
+    return { ok: false, message: `FUTBIN is not responding${res.status ? ` (${res.status})` : ""}.` };
   }
   const parsed = res.squad;
   const players = parsed.players.filter((player) => player.eaId).slice(0, FIELD_PLAYERS);
   if (!players.length) {
-    return { ok: false, message: "Les cartes de cette page FUTBIN n'ont pas pu être identifiées." };
+    return { ok: false, message: "The cards on this FUTBIN page could not be identified." };
   }
-  // Prix FUTBIN de la page d'équipe (plateforme du compte) : utilisés tout de suite, puis relus
-  // sur la page de chaque joueur (le lien FUTBIN est déjà connu, sans recherche).
+  // FUTBIN squad page prices (account platform): use immediately, then refresh
+  // from each player's page (FUTBIN link already known, no search).
   const platform = pricePlatform();
   players.forEach((player) => {
     if (player.prices) {
@@ -392,7 +392,7 @@ export const releaseSession = (session) => {
   }
 };
 
-// Recalcule les postes avec la formation visée et les cartes connues.
+// Recalculate positions using the target formation and known cards.
 export const replan = (session) => {
   const { slots } = readSlots(session.ctx.squad, session.formation);
   session.slots = slots;
@@ -433,7 +433,7 @@ const saveChallenge = async (ctx) => {
   return response;
 };
 
-// Met la formation FUTBIN et place toutes les cartes connues, puis enregistre le défi.
+// Apply the FUTBIN formation and place all known cards, then save the challenge.
 export const applySession = async (session) => {
   const { squad } = session.ctx;
   try {
@@ -450,32 +450,32 @@ export const applySession = async (session) => {
         keep.add(entry.slot);
       }
     });
-    // Les postes des manquants sont vidés : aucune ancienne carte ne bloque un futur placement.
+    // Clear missing players' positions: no old card can block a future placement.
     session.slots
       .filter((slot) => !slot.brick && slot.filled && !keep.has(slot.index))
       .forEach((slot) => call(squad, "removeItemFromSlot", slot.index));
     squad.setPlayers(pageArrayOf(target), true);
   } catch (e) {
-    return { ok: false, message: `Placement impossible : ${errorMessage(e)}` };
+    return { ok: false, message: `Cannot place players: ${errorMessage(e)}` };
   }
   const saved = await saveChallenge(session.ctx);
   if (!saved || !saved.success) {
     const code = (saved && ((saved.error && saved.error.code) || saved.status)) || "";
-    return { ok: false, message: `Équipe placée mais non enregistrée par EA${code ? ` (${code})` : ""}.` };
+    return { ok: false, message: `Squad placed but not saved by EA${code ? ` (${code})` : ""}.` };
   }
   return { ok: true };
 };
 
-// --------------------------------------------------------- achat des manquants
+// --------------------------------------------------------- buying missing players
 
 const FATAL_MESSAGES = {
-  [KIND.CAPTCHA]: "captcha EA : résous-le dans le web app puis relance",
-  [KIND.AUTH]: "session EA expirée : reconnecte-toi",
-  [KIND.BANNED]: "compte bloqué par EA",
-  [KIND.LOCKED]: "marché des transferts verrouillé par EA",
-  [KIND.RATE]: "EA limite les requêtes : attends quelques minutes avant de relancer",
-  [KIND.BLOCKED]: "EA bloque temporairement les requêtes : attends quelques minutes",
-  [KIND.FUNDS]: "coins insuffisants",
+  [KIND.CAPTCHA]: "EA captcha: solve it in the web app, then restart",
+  [KIND.AUTH]: "EA session expired: log back in",
+  [KIND.BANNED]: "account blocked by EA",
+  [KIND.LOCKED]: "transfer market locked by EA",
+  [KIND.RATE]: "EA is rate-limiting requests: wait a few minutes before restarting",
+  [KIND.BLOCKED]: "EA is temporarily blocking requests: wait a few minutes",
+  [KIND.FUNDS]: "insufficient coins",
 };
 
 const stopKind = (error) =>
@@ -498,19 +498,19 @@ const offersFor = (items, entry, maxPrice) =>
     )
     .sort((a, b) => a.bin - b.bin || (Number(b.auction.expires) || 0) - (Number(a.auction.expires) || 0));
 
-// Achète une carte manquante : recherche exacte (version précise) avec anti-cache, la moins chère d'abord.
+// Buy a missing card: exact version search with cache busting, cheapest first.
 const buyOne = async (entry, token, onUpdate) => {
   const settings = getSettings();
   const tries = Math.max(1, Math.min(30, toInt(settings.sbc.triesPerPlayer) || 6));
   for (let attempt = 0; attempt < tries && !token.cancelled; attempt += 1) {
-    // Jamais au-dessus du prix max validé au lancement ; suit une baisse du prix FUTBIN.
+    // Never exceed the max price approved at launch; follow decreases in the FUTBIN price.
     const live = maxPriceFor(entry);
     const maxPrice = entry.frozenMax ? (live ? Math.min(entry.frozenMax, live) : entry.frozenMax) : live;
     if (!maxPrice) {
-      entry.note = "prix FUTBIN inconnu : indique un prix max";
+      entry.note = "unknown FUTBIN price: enter a max price";
       return { ok: false };
     }
-    entry.note = `recherche ${attempt + 1}/${tries} ≤ ${formatCoins(maxPrice)}`;
+    entry.note = `search ${attempt + 1}/${tries} ≤ ${formatCoins(maxPrice)}`;
     onUpdate(entry);
     const filter = normalizeFilter({ name: entry.player.name, definitionId: entry.player.eaId, maxBuy: maxPrice });
     const bust = cacheBusterPrices(settings.timing.cacheBuster, attempt, {
@@ -530,12 +530,12 @@ const buyOne = async (entry, token, onUpdate) => {
       if (stopKind(result.error)) {
         return { ok: false, fatal: result.error };
       }
-      entry.note = `recherche refusée (${result.error.label})`;
+      entry.note = `search rejected (${result.error.label})`;
     } else {
       for (const offer of offersFor(result.items, entry, maxPrice).slice(0, 2)) {
         const coins = getCoins();
         if (coins && coins < offer.bin) {
-          return { ok: false, fatal: { kind: KIND.FUNDS, code: 470, label: "coins insuffisants" } };
+          return { ok: false, fatal: { kind: KIND.FUNDS, code: 470, label: "insufficient coins" } };
         }
         const buy = await market.bidOnItem(offer.item, offer.bin);
         if (buy.ok) {
@@ -545,10 +545,10 @@ const buyOne = async (entry, token, onUpdate) => {
           return { ok: false, fatal: buy.error };
         }
         if (buy.error.kind !== KIND.GONE) {
-          entry.note = `achat refusé (${buy.error.label})`;
+          entry.note = `purchase rejected (${buy.error.label})`;
           break;
         }
-        entry.note = "raté (déjà achetée), on continue…";
+        entry.note = "missed (already bought), continuing…";
         onUpdate(entry);
       }
     }
@@ -559,18 +559,18 @@ const buyOne = async (entry, token, onUpdate) => {
   return { ok: false };
 };
 
-// Achète les manquants un par un, les envoie au club et les place dans le défi.
+// Buy missing players one at a time, send them to the club, and place them in the challenge.
 export const buyMissing = async (session, { token, onUpdate = () => {} }) => {
   const report = { bought: 0, spent: 0, failed: 0, stopped: "" };
   const queue = session.entries.filter((entry) => entry.state === "missing" || entry.state === "failed");
-  // Prix max figés au lancement : le budget affiché est un vrai plafond.
+  // Max prices are fixed at launch: the displayed budget is a real cap.
   queue.forEach((entry) => {
     entry.frozenMax = maxPriceFor(entry);
   });
   for (let index = 0; index < queue.length; index += 1) {
     const entry = queue[index];
     if (token.cancelled) {
-      report.stopped = "arrêt demandé";
+      report.stopped = "stop requested";
       break;
     }
     entry.state = "searching";
@@ -587,13 +587,13 @@ export const buyMissing = async (session, { token, onUpdate = () => {} }) => {
       entry.note = FATAL_MESSAGES[outcome.fatal.kind] || outcome.fatal.label;
       report.stopped = entry.note;
       onUpdate(entry);
-      log.error(`Achat DCE arrêté : ${entry.note}.`);
+      log.error(`SBC purchasing stopped: ${entry.note}.`);
       break;
     }
     if (!outcome.ok) {
       entry.state = token.cancelled ? "missing" : "failed";
       if (!token.cancelled) {
-        entry.note = entry.note && /inconnu/.test(entry.note) ? entry.note : "aucune offre sous ton prix max";
+        entry.note = entry.note && /unknown|inconnu/i.test(entry.note) ? entry.note : "no offers below your max price";
         report.failed += 1;
       }
       onUpdate(entry);
@@ -602,17 +602,17 @@ export const buyMissing = async (session, { token, onUpdate = () => {} }) => {
     report.bought += 1;
     report.spent += outcome.price;
     entry.boughtPrice = outcome.price;
-    log.buy(`DCE : ${entry.player.name} ${entry.player.rating || ""} acheté ${formatCoins(outcome.price)}.`);
-    recordTransaction({ type: "achat DCE", name: entry.player.name, rating: entry.player.rating, price: outcome.price, filter: "DCE" });
+    log.buy(`SBC: ${entry.player.name} ${entry.player.rating || ""} bought for ${formatCoins(outcome.price)}.`);
+    recordTransaction({ type: "SBC purchase", name: entry.player.name, rating: entry.player.rating, price: outcome.price, filter: "SBC" });
     updateState({ coins: getCoins() });
     const moved = await market.moveItem(outcome.item, "CLUB");
     if (!moved.ok) {
-      log.warn(`${entry.player.name} acheté mais pas envoyé au club (${moved.error.label}) : place-le à la main.`);
+      log.warn(`${entry.player.name} bought but not sent to the club (${moved.error.label}): place it manually.`);
     }
     entry.item = outcome.item;
-    entry.source = "acheté";
+    entry.source = "purchased";
     entry.state = "bought";
-    entry.note = `acheté ${formatCoins(outcome.price)}`;
+    entry.note = `bought for ${formatCoins(outcome.price)}`;
     onUpdate(entry);
     const placed = await applySession(session);
     if (!placed.ok) {
@@ -626,19 +626,19 @@ export const buyMissing = async (session, { token, onUpdate = () => {} }) => {
   return report;
 };
 
-// Âge lisible du prix FUTBIN d'une carte (pour l'aperçu).
+// Readable FUTBIN price age for a card (for the preview).
 export const priceStatus = (entry) => {
   const record = getPriceRecord(entry.player.eaId);
-  const fallback = entry.player.price ? "page FUTBIN, indicatif" : "";
+  const fallback = entry.player.price ? "FUTBIN page, indicative" : "";
   if (!record || !record.fetchedAt || !livePrice(entry)) {
     if (record && record.status === "miss") {
-      return fallback ? `${fallback} · carte introuvable` : "carte introuvable sur FUTBIN";
+      return fallback ? `${fallback} · card not found` : "card not found on FUTBIN";
     }
     if (record && (record.status === "error" || record.status === "paused")) {
-      return fallback ? `${fallback} · FUTBIN ne répond pas` : "FUTBIN ne répond pas";
+      return fallback ? `${fallback} · FUTBIN is not responding` : "FUTBIN is not responding";
     }
-    return fallback || "prix en cours de lecture…";
+    return fallback || "fetching price…";
   }
   const seconds = Math.max(0, Math.round((Date.now() - record.fetchedAt) / 1000));
-  return seconds < 60 ? `il y a ${seconds} s` : `il y a ${Math.round(seconds / 60)} min`;
+  return seconds < 60 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
 };

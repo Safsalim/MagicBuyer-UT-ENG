@@ -35,33 +35,33 @@ import {
 } from "../fields";
 
 const LEVELS = [
-  ["any", "Toutes"],
+  ["any", "All"],
   ["bronze", "Bronze"],
-  ["silver", "Argent"],
-  ["gold", "Or"],
-  ["SP", "Spéciale"],
+  ["silver", "Silver"],
+  ["gold", "Gold"],
+  ["SP", "Special"],
 ];
 
 const POSITIONS = [
-  ["any", "Tous les postes"],
-  ["130", "Zone : défense"],
-  ["131", "Zone : milieu"],
-  ["132", "Zone : attaque"],
-  ["GK", "G (gardien)"],
-  ["RB", "DD"],
-  ["RWB", "DLD"],
-  ["CB", "DC"],
-  ["LB", "DG"],
-  ["LWB", "DLG"],
-  ["CDM", "MDC"],
-  ["CM", "MC"],
-  ["CAM", "MOC"],
-  ["RM", "MD"],
-  ["LM", "MG"],
-  ["RW", "AD"],
-  ["LW", "AG"],
-  ["CF", "AT"],
-  ["ST", "BU"],
+  ["any", "All positions"],
+  ["130", "Zone: defense"],
+  ["131", "Zone: midfield"],
+  ["132", "Zone: attack"],
+  ["GK", "GK (goalkeeper)"],
+  ["RB", "RB"],
+  ["RWB", "RWB"],
+  ["CB", "CB"],
+  ["LB", "LB"],
+  ["LWB", "LWB"],
+  ["CDM", "CDM"],
+  ["CM", "CM"],
+  ["CAM", "CAM"],
+  ["RM", "RM"],
+  ["LM", "LM"],
+  ["RW", "RW"],
+  ["LW", "LW"],
+  ["CF", "CF"],
+  ["ST", "ST"],
 ];
 
 let unsubscribeFilters = null;
@@ -71,7 +71,7 @@ let liveTimer = null;
 
 const LIVE_MAX_AGE = 5 * 60 * 1000;
 
-const isDefaultName = (name) => /^(nouveau filtre|mon filtre|filtre)( \(copie\))?$/i.test(String(name || "").trim());
+const isDefaultName = (name) => /^(new filter|my filter|filter|nouveau filtre|mon filtre|filtre)( \((?:copy|copie)\))?$/i.test(String(name || "").trim());
 
 const filterPrices = (filter) => {
   const parts = [];
@@ -88,7 +88,7 @@ const filterPrices = (filter) => {
   return parts.join(" ");
 };
 
-// Ligne "prix FUTBIN en direct" du filtre actif (mode % FUTBIN).
+// Live FUTBIN price row for the active filter (% FUTBIN mode).
 const futbinLiveHtml = () => {
   const filter = getActiveFilter();
   if (!filter || filter.priceMode !== "futbin") {
@@ -96,29 +96,29 @@ const futbinLiveHtml = () => {
   }
   const key = futbinKeyForFilter(filter);
   if (!key) {
-    return `<div class="mb-note is-warn">Choisis un joueur (ou un ID de version) : le prix FUTBIN est celui de cette carte.</div>`;
+    return `<div class="mb-note is-warn">Choose a player (or version ID): the FUTBIN price belongs to that card.</div>`;
   }
   const record = getPriceRecord(key);
   const price = currentPrice(key, LIVE_MAX_AGE);
   if (!price) {
     const text =
       record && record.status === "miss"
-        ? "Carte introuvable sur FUTBIN : indique un ID de version exacte ou passe en prix fixe."
+        ? "Card not found on FUTBIN: enter an exact version ID or switch to a fixed price."
         : record && record.status === "error"
-        ? "FUTBIN ne répond pas pour l'instant (onglet FUTBIN pour tester l'accès)."
-        : "Lecture du prix FUTBIN…";
+        ? "FUTBIN is not responding right now (use the FUTBIN tab to test access)."
+        : "Fetching FUTBIN price…";
     return `<div class="mb-note${record && record.status && record.status !== "ok" ? " is-warn" : ""}">${text}</div>`;
   }
   const computed = floorPrice((currentPrice(key, LIVE_MAX_AGE, "buy") * filter.futbinPercent) / 100);
   const max = filter.maxBuy ? Math.min(filter.maxBuy, computed) : computed;
   const seconds = Math.round((Date.now() - record.fetchedAt) / 1000);
-  const age = seconds < 60 ? `${seconds} s` : `${Math.round(seconds / 60)} min`;
-  return `<div class="mb-note mb-live">FUTBIN <b>${formatCoins(price)}</b>${record.suspect ? " ⚠" : ""} · lu il y a ${age}
-    → achat max <b>${formatCoins(max)}</b>${filter.maxBuy && filter.maxBuy < computed ? " (plafond)" : ""}
-    <button type="button" class="mb-link" data-target-action="futbin-refresh">actualiser</button></div>`;
+  const age = seconds < 60 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
+  return `<div class="mb-note mb-live">FUTBIN <b>${formatCoins(price)}</b>${record.suspect ? " ⚠" : ""} · fetched ${age}
+    → max buy <b>${formatCoins(max)}</b>${filter.maxBuy && filter.maxBuy < computed ? " (cap)" : ""}
+    <button type="button" class="mb-link" data-target-action="futbin-refresh">refresh</button></div>`;
 };
 
-// Le prix FUTBIN du filtre affiché est suivi tant que l'onglet Cible est ouvert.
+// Track the displayed filter's FUTBIN price while the Target tab is open.
 const syncLiveTracking = () => {
   const filter = getActiveFilter();
   const key = filter && filter.priceMode === "futbin" ? futbinKeyForFilter(filter) : 0;
@@ -145,7 +145,7 @@ const listHtml = () => {
       <div class="mb-filter-item${active && active.id === filter.id ? " is-active" : ""}" data-filter-id="${filter.id}" role="button" tabindex="0">
         ${
           rotation.enabled
-            ? `<button type="button" class="mb-check" role="checkbox" aria-checked="${filter.enabled}" data-filter-toggle="${filter.id}" aria-label="Inclure ${escapeHtml(filter.name)} dans la rotation">${filter.enabled ? "✓" : ""}</button>`
+            ? `<button type="button" class="mb-check" role="checkbox" aria-checked="${filter.enabled}" data-filter-toggle="${filter.id}" aria-label="Include ${escapeHtml(filter.name)} in rotation">${filter.enabled ? "✓" : ""}</button>`
             : ""
         }
         <div class="mb-filter-main">
@@ -162,9 +162,9 @@ const playerChipHtml = () => {
   const filter = getActiveFilter();
   const player = filter && filter.player;
   if (!player) {
-    return `<span class="mb-empty">Aucun joueur : le filtre porte sur tous les joueurs correspondant aux critères.</span>`;
+    return `<span class="mb-empty">No player selected: the filter applies to all players matching the criteria.</span>`;
   }
-  return `<span class="mb-chip"><span>${escapeHtml(player.name || "Joueur")}${player.rating ? ` · ${player.rating}` : ""} · id ${player.id}</span><button type="button" data-player-clear aria-label="Retirer le joueur">×</button></span>`;
+  return `<span class="mb-chip"><span>${escapeHtml(player.name || "Player")}${player.rating ? ` · ${player.rating}` : ""} · id ${player.id}</span><button type="button" data-player-clear aria-label="Remove player">×</button></span>`;
 };
 
 const targetWarningHtml = () => {
@@ -172,138 +172,138 @@ const targetWarningHtml = () => {
   if (!filter || filterHasTarget(filter)) {
     return "";
   }
-  return `<div class="mb-note is-warn" style="margin-top:8px">Ni joueur ni critère : ce filtre est ignoré par le bot (sécurité, sinon il achèterait n'importe quel joueur sous ton prix max). Choisis un joueur, ou une qualité / rareté / note.</div>`;
+  return `<div class="mb-note is-warn" style="margin-top:8px">No player or criteria: the bot skips this filter for safety (otherwise it would buy any player below your max price). Choose a player, quality, rarity, or rating.</div>`;
 };
 
 const lastEaHtml = () => {
   const snapshot = getLastEaSearch();
   if (!snapshot) {
-    return "Lance une recherche dans le marché des transferts EA, puis importe-la ici (rareté, poste, style, nation…).";
+    return "Run a search in EA's transfer market, then import it here (rarity, position, style, nation…).";
   }
-  const when = new Date(snapshot.capturedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  const player = snapshot.player && snapshot.player.name ? snapshot.player.name : snapshot.player ? `joueur ${snapshot.player.id}` : "tous les joueurs";
-  return `Dernière recherche EA capturée à ${when} : ${escapeHtml(player)}${snapshot.maxBuy ? ` · achat max ${formatCoins(snapshot.maxBuy)}` : ""}.`;
+  const when = new Date(snapshot.capturedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  const player = snapshot.player && snapshot.player.name ? snapshot.player.name : snapshot.player ? `player ${snapshot.player.id}` : "all players";
+  return `Last EA search captured at ${when} : ${escapeHtml(player)}${snapshot.maxBuy ? ` · max buy ${formatCoins(snapshot.maxBuy)}` : ""}.`;
 };
 
 export const targetPageHtml = () => `
   ${section(
-    "Filtres de snipe",
+    "Snipe filters",
     `<div class="mb-filter-list" data-filter-list>${listHtml()}</div>
      <div class="mb-row" style="margin-top:8px">
-       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-filter-action="add">+ Nouveau</button>
-       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-filter-action="duplicate">Dupliquer</button>
-       <button type="button" class="mb-btn mb-btn-danger mb-btn-sm" data-filter-action="delete">Supprimer</button>
+       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-filter-action="add">+ New</button>
+       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-filter-action="duplicate">Duplicate</button>
+       <button type="button" class="mb-btn mb-btn-danger mb-btn-sm" data-filter-action="delete">Delete</button>
      </div>
      <div style="margin-top:8px">${grid(
-       toggleField({ bind: "r:enabled", label: "Rotation entre filtres", hint: "Alterne entre les filtres cochés." }),
-       numberField({ bind: "r:every", label: "Changer toutes les", hint: "recherches", min: 1, max: 50 }),
-       toggleField({ bind: "r:random", label: "Ordre aléatoire", wide: true })
+       toggleField({ bind: "r:enabled", label: "Rotate filters", hint: "Alternate between checked filters." }),
+       numberField({ bind: "r:every", label: "Switch every", hint: "searches", min: 1, max: 50 }),
+       toggleField({ bind: "r:random", label: "Random order", wide: true })
      )}</div>`
   )}
   ${section(
-    "Cible",
+    "Target",
     grid(
-      textField({ bind: "f:name", label: "Nom du filtre", wide: true }),
+      textField({ bind: "f:name", label: "Filter name", wide: true }),
       `<div class="mb-field is-wide">
-        <label class="mb-label" for="mb-player-input"><span>Joueur</span><em data-catalog-status></em></label>
+        <label class="mb-label" for="mb-player-input"><span>Player</span><em data-catalog-status></em></label>
         <div class="mb-player-search">
-          <input id="mb-player-input" class="mb-input" type="search" autocomplete="off" spellcheck="false" placeholder="Nom du joueur (ex. Mbappé)" data-player-input aria-autocomplete="list" aria-controls="mb-player-results" />
+          <input id="mb-player-input" class="mb-input" type="search" autocomplete="off" spellcheck="false" placeholder="Player name (e.g. Mbappé)" data-player-input aria-autocomplete="list" aria-controls="mb-player-results" />
           <div class="mb-results" id="mb-player-results" role="listbox" data-player-results hidden></div>
         </div>
         <div style="margin-top:8px" data-player-chip>${playerChipHtml()}</div>
         <div data-target-warning>${targetWarningHtml()}</div>
-        <p class="mb-hint">Toutes les versions du joueur sont recherchées. Pour une carte précise (TOTW, promo…), indique son ID de version ou filtre par note / rareté.</p>
+        <p class="mb-hint">All versions of the player are searched. For a specific card (TOTW, promo…), enter its version ID or filter by rating / rarity.</p>
       </div>`,
-      selectField({ bind: "f:level", label: "Qualité", options: LEVELS }),
-      selectField({ bind: "f:positionChoice", label: "Poste", options: POSITIONS }),
-      numberField({ bind: "f:minRating", label: "Note min", placeholder: "—", max: 99 }),
-      numberField({ bind: "f:maxRating", label: "Note max", placeholder: "—", max: 99 })
+      selectField({ bind: "f:level", label: "Quality", options: LEVELS }),
+      selectField({ bind: "f:positionChoice", label: "Position", options: POSITIONS }),
+      numberField({ bind: "f:minRating", label: "Min rating", placeholder: "—", max: 99 }),
+      numberField({ bind: "f:maxRating", label: "Max rating", placeholder: "—", max: 99 })
     )
   )}
   ${section(
-    "Prix d'achat",
+    "Buy price",
     grid(
       selectField({
         bind: "f:priceMode",
         label: "Mode",
         wide: true,
         options: [
-          ["fixed", "Prix fixe"],
-          ["futbin", "% du prix FUTBIN (suivi en direct)"],
+          ["fixed", "Fixed price"],
+          ["futbin", "% of FUTBIN price (tracked live)"],
         ],
       }),
       numberField({
         bind: "f:futbinPercent",
-        label: "% du prix FUTBIN",
+        label: "% of FUTBIN price",
         float: true,
         min: 10,
         max: 150,
         key: true,
         showIf: "f:priceMode=futbin",
-        hint: "ex. 90 = achète jusqu'à 90 % du prix FUTBIN. Relu toutes les 60 à 120 s pendant le bot.",
+        hint: "e.g. 90 = buy up to 90% of the FUTBIN price. Refreshed every 60–120 seconds while the bot runs.",
       }),
       priceField({
         bind: "f:maxBuy",
-        label: "Prix d'achat max (achat immédiat)",
+        label: "Max buy price (Buy Now)",
         key: true,
         wide: true,
-        hint: "Mode fixe : le bot achète toute carte à ce prix ou moins. Mode FUTBIN : plafond absolu optionnel (vide = aucun).",
+        hint: "Fixed mode: buy any card at this price or less. FUTBIN mode: optional absolute cap (empty = none).",
       }),
       `<div class="mb-field is-wide" data-show-if="f:priceMode=futbin"><div data-futbin-live>${futbinLiveHtml()}</div></div>`,
-      priceField({ bind: "f:maxBid", label: "Enchère max", hint: "Utilisé seulement si les enchères sont activées (onglet Achat)." }),
-      priceField({ bind: "f:minBuy", label: "Achat min (filtre)", hint: "Optionnel." })
+      priceField({ bind: "f:maxBid", label: "Max bid", hint: "Used only when bidding is enabled (Buy tab)." }),
+      priceField({ bind: "f:minBuy", label: "Min buy price (filter)", hint: "Optionnel." })
     )
   )}
   ${section(
-    "Revente",
+    "Reselling",
     grid(
       selectField({
         bind: "f:sellMode",
-        label: "Prix de revente",
+        label: "Sell price",
         wide: true,
         options: [
-          ["global", "Comme l'onglet Vente"],
-          ["fixed", "Prix fixe pour ce filtre"],
-          ["futbin", "% du prix FUTBIN pour ce filtre"],
+          ["global", "Use Sell tab setting"],
+          ["fixed", "Fixed price for this filter"],
+          ["futbin", "% of FUTBIN price for this filter"],
         ],
       }),
-      priceField({ bind: "f:sellPrice", label: "Prix de revente", wide: true, showIf: "f:sellMode=fixed" }),
+      priceField({ bind: "f:sellPrice", label: "Sell price", wide: true, showIf: "f:sellMode=fixed" }),
       rangeField({
         bind: "f:sellPercent",
-        label: "% du prix FUTBIN",
+        label: "% of FUTBIN price",
         unit: null,
         optional: true,
         wide: true,
-        placeholder: "ex. 98-100 (vide = onglet Vente)",
+        placeholder: "e.g. 98-100 (empty = Sell tab)",
         showIf: "f:sellMode=futbin",
-        hint: "Prix FUTBIN de la version achetée, relu juste après l'achat.",
+        hint: "The purchased version's FUTBIN price, refreshed immediately after buying.",
       })
     )
   )}
   ${section(
-    "Critères avancés (IDs EA)",
+    "Advanced criteria (EA IDs)",
     grid(
-      numberField({ bind: "f:definitionId", label: "ID de version exacte", placeholder: "ex. 50565123" }),
-      textField({ bind: "f:raritiesText", label: "IDs de rareté", placeholder: "ex. 3" }),
+      numberField({ bind: "f:definitionId", label: "Exact version ID", placeholder: "e.g. 50565123" }),
+      textField({ bind: "f:raritiesText", label: "Rarity IDs", placeholder: "e.g. 3" }),
       numberField({ bind: "f:nationField", label: "Nation (ID)", placeholder: "—" }),
-      numberField({ bind: "f:leagueField", label: "Ligue (ID)", placeholder: "—" }),
+      numberField({ bind: "f:leagueField", label: "League (ID)", placeholder: "—" }),
       numberField({ bind: "f:clubField", label: "Club (ID)", placeholder: "—" }),
-      numberField({ bind: "f:playStyleField", label: "Style de jeu (ID)", placeholder: "—" })
+      numberField({ bind: "f:playStyleField", label: "Play style (ID)", placeholder: "—" })
     ) +
-      `<p class="mb-hint">Le plus simple : règle ta recherche dans le marché EA puis clique sur « Importer ».</p>`
+      `<p class="mb-hint">Set up your search in the EA market, then click “Import”.</p>`
   )}
   ${section(
     "Import & test",
     `<div class="mb-note" data-last-ea>${lastEaHtml()}</div>
      <div class="mb-row" style="margin-top:8px">
-       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-target-action="import">Importer la recherche EA</button>
-       <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-target-action="preview">Tester la recherche (sans acheter)</button>
+       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-target-action="import">Import EA search</button>
+       <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-target-action="preview">Test search (without buying)</button>
      </div>
      <div data-preview></div>`
   )}
 `;
 
-// Champs "virtuels" : convertis vers le modèle du filtre.
+// Virtual fields: convert to the filter model.
 const VIRTUAL = {
   positionChoice: {
     read: (filter) => (filter.zone > 0 ? String(filter.zone) : filter.position || "any"),
@@ -332,7 +332,7 @@ const previewHtml = (result) => {
     return `<div class="mb-note is-warn" style="margin-top:8px">${escapeHtml(result.message)}</div>`;
   }
   if (!result.rows.length) {
-    return `<div class="mb-note" style="margin-top:8px">Aucune carte trouvée${result.maxBuy ? ` à ${formatCoins(result.maxBuy)} ou moins` : ""} (${Math.round(result.latency)} ms). C'est normal si ton prix max est sous le marché : le bot attend qu'une affaire apparaisse.</div>`;
+    return `<div class="mb-note" style="margin-top:8px">No cards found${result.maxBuy ? ` at ${formatCoins(result.maxBuy)} or less` : ""} (${Math.round(result.latency)} ms). This is normal if your max price is below market value: the bot waits for a deal to appear.</div>`;
   }
   const rows = result.rows
     .slice(0, 21)
@@ -341,7 +341,7 @@ const previewHtml = (result) => {
       const minutes = Math.floor(row.expires / 60);
       const time = row.expires >= 3600 ? `${Math.floor(row.expires / 3600)} h` : `${minutes} min`;
       return `<tr class="${deal ? "is-deal" : row.match ? "" : "is-muted"}">
-        <td>${escapeHtml(row.name)} ${row.rating}${row.own ? " (toi)" : ""}</td>
+        <td>${escapeHtml(row.name)} ${row.rating}${row.own ? " (you)" : ""}</td>
         <td class="is-num">${row.bin ? formatCoins(row.bin) : "—"}</td>
         <td class="is-num">${row.bid ? formatCoins(row.bid) : "—"}</td>
         <td class="is-num">${time}</td>
@@ -349,14 +349,14 @@ const previewHtml = (result) => {
     })
     .join("");
   const cheapest = result.rows.find((row) => row.bin && row.match && !row.own);
-  const futbin = result.futbinPrice ? ` · FUTBIN ${formatCoins(result.futbinPrice)} → achat max ${formatCoins(result.maxBuy)}` : "";
+  const futbin = result.futbinPrice ? ` · FUTBIN ${formatCoins(result.futbinPrice)} → max buy ${formatCoins(result.maxBuy)}` : "";
   return `<div class="mb-preview">
       <table>
-        <thead><tr><th>Carte</th><th class="is-num">Achat imm.</th><th class="is-num">Enchère</th><th class="is-num">Fin</th></tr></thead>
+        <thead><tr><th>Card</th><th class="is-num">Buy Now</th><th class="is-num">Bid</th><th class="is-num">Ends</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <p class="mb-hint">${result.rows.length} résultat(s) · ${Math.round(result.latency)} ms${cheapest ? ` · moins cher : ${formatCoins(cheapest.bin)}` : ""}${futbin}. En vert : ce que le bot achèterait.</p>`;
+    <p class="mb-hint">${result.rows.length} result(s) · ${Math.round(result.latency)} ms${cheapest ? ` · cheapest: ${formatCoins(cheapest.bin)}` : ""}${futbin}. Green shows what the bot would buy.</p>`;
 };
 
 export const bindTargetPage = (page, refreshAll) => {
@@ -424,7 +424,7 @@ export const bindTargetPage = (page, refreshAll) => {
 
   const paintHits = () => {
     if (!hits.length) {
-      results.innerHTML = `<div class="mb-hit"><small>Aucun joueur trouvé.</small></div>`;
+      results.innerHTML = `<div class="mb-hit"><small>No players found.</small></div>`;
       results.hidden = false;
       return;
     }
@@ -446,9 +446,9 @@ export const bindTargetPage = (page, refreshAll) => {
       closeResults();
       return;
     }
-    status.textContent = "recherche…";
+    status.textContent = "searching…";
     hits = await searchEaPlayersByTerm(term, 12);
-    status.textContent = hits.length ? "" : "catalogue EA indisponible ?";
+    status.textContent = hits.length ? "" : "EA catalog unavailable?";
     focusIndex = hits.length ? 0 : -1;
     paintHits();
   }, 180);
@@ -456,7 +456,7 @@ export const bindTargetPage = (page, refreshAll) => {
   input.addEventListener("input", search);
   input.addEventListener("focus", () => {
     loadEaPlayersCatalog().then((rows) => {
-      status.textContent = rows && rows.length ? `${rows.length.toLocaleString("fr-FR")} joueurs` : "catalogue indisponible";
+      status.textContent = rows && rows.length ? `${rows.length.toLocaleString("en-US")} players` : "catalog unavailable";
     });
   });
   input.addEventListener("keydown", (event) => {
@@ -511,11 +511,11 @@ export const bindTargetPage = (page, refreshAll) => {
     if (action) {
       const active = getActiveFilter();
       if (action.dataset.filterAction === "add") {
-        addFilter({ name: "Nouveau filtre" });
+        addFilter({ name: "New filter" });
       } else if (action.dataset.filterAction === "duplicate" && active) {
         duplicateFilter(active.id);
       } else if (action.dataset.filterAction === "delete" && active) {
-        if (window.confirm(`Supprimer le filtre « ${active.name} » ?`)) {
+        if (window.confirm(`Delete filter “${active.name}”?`)) {
           removeFilter(active.id);
         }
       }
@@ -537,20 +537,20 @@ export const bindTargetPage = (page, refreshAll) => {
     if (targetAction.dataset.targetAction === "import") {
       const snapshot = getLastEaSearch();
       if (!snapshot) {
-        preview.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">Aucune recherche EA capturée. Va dans Transferts → Marché des transferts, règle tes critères et clique sur Rechercher (ou sur « Sniper cette recherche »).</div>`;
+        preview.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">No EA search captured. Go to Transfers → Transfer Market, set your criteria, then click Search (or “Snipe this search”).</div>`;
         return;
       }
       importSnapshot(snapshot);
-      preview.innerHTML = `<div class="mb-note" style="margin-top:8px">Recherche EA importée dans le filtre actif. Vérifie le prix d'achat max.</div>`;
+      preview.innerHTML = `<div class="mb-note" style="margin-top:8px">EA search imported into the active filter. Check the max buy price.</div>`;
       return;
     }
     if (targetAction.dataset.targetAction === "preview") {
       if (isRunning()) {
-        preview.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">Le bot tourne déjà : regarde le journal.</div>`;
+        preview.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">The bot is already running: check the log.</div>`;
         return;
       }
       targetAction.disabled = true;
-      preview.innerHTML = `<div class="mb-note" style="margin-top:8px">Recherche en cours…</div>`;
+      preview.innerHTML = `<div class="mb-note" style="margin-top:8px">Searching…</div>`;
       try {
         const filter = getActiveFilter();
         const result = await previewSearch(filter);
@@ -571,7 +571,7 @@ export const bindTargetPage = (page, refreshAll) => {
   });
 };
 
-// Applique une recherche EA capturée au filtre actif (ou en crée un nouveau).
+// Apply a captured EA search to the active filter (or create a new one).
 export const importSnapshot = (snapshot, { asNew = false } = {}) => {
   if (!snapshot) {
     return null;
@@ -601,19 +601,19 @@ export const importSnapshot = (snapshot, { asNew = false } = {}) => {
   }
   const name = snapshot.player && snapshot.player.name
     ? `${snapshot.player.name}${snapshot.player.rating ? ` ${snapshot.player.rating}` : ""}`
-    : "Recherche EA";
+    : "EA search";
   const active = getActiveFilter();
   if (asNew || !active) {
     return addFilter(Object.assign({ name }, patch));
   }
-  if (isDefaultName(active.name) || /^Recherche EA/.test(active.name)) {
+  if (isDefaultName(active.name) || /^(?:EA search|Recherche EA)/.test(active.name)) {
     patch.name = name;
   }
   updateFilter(active.id, patch);
   return normalizeFilter(Object.assign({}, active, patch));
 };
 
-// Achat max réellement utilisé (fixe, ou % FUTBIN plafonné) pour les aides de la page.
+// Effective max buy price (fixed or capped FUTBIN percentage) for page hints.
 const effectiveBuy = (filter) => {
   if (filter.priceMode !== "futbin") {
     return toInt(filter.maxBuy);
@@ -627,7 +627,7 @@ const effectiveBuy = (filter) => {
   return filter.maxBuy ? Math.min(filter.maxBuy, computed) : computed;
 };
 
-// Texte d'aide sous le prix de revente : net après taxe + bénéfice par carte.
+// Help text below the sell price: net after tax + profit per card.
 export const sellExtra = () => {
   const filter = getActiveFilter();
   if (!filter) {
@@ -655,5 +655,5 @@ export const sellExtra = () => {
   const buy = effectiveBuy(filter);
   const net = afterTax(sell);
   const profit = buy ? profitFor(buy, sell) : 0;
-  return `${prefix}net ${formatCoins(net)}${buy ? ` · bénéfice ${profit >= 0 ? "+" : ""}${formatCoins(profit)}` : ""}`;
+  return `${prefix}net ${formatCoins(net)}${buy ? ` · profit ${profit >= 0 ? "+" : ""}${formatCoins(profit)}` : ""}`;
 };

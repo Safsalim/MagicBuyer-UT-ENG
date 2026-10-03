@@ -31,26 +31,26 @@ import { bindTargetPage, sellExtra, targetPageHtml } from "./pages/target";
 import { STYLES } from "./styles";
 
 const TABS = [
-  { id: "target", label: "Cible", html: targetPageHtml },
-  { id: "buy", label: "Achat", html: buyPageHtml },
-  { id: "sell", label: "Vente", html: sellPageHtml },
+  { id: "target", label: "Target", html: targetPageHtml },
+  { id: "buy", label: "Buy", html: buyPageHtml },
+  { id: "sell", label: "Sell", html: sellPageHtml },
   { id: "timing", label: "Timing", html: timingPageHtml },
-  { id: "transfer", label: "Transferts", html: transferPageHtml },
+  { id: "transfer", label: "Transfers", html: transferPageHtml },
   { id: "futbin", label: "FUTBIN", html: futbinPageHtml },
-  { id: "alerts", label: "Alertes", html: alertsPageHtml },
+  { id: "alerts", label: "Alerts", html: alertsPageHtml },
 ];
 
 const LOG_ICONS = { search: "🔎", buy: "✅", success: "✔️", warning: "⚠️", error: "⛔", info: "•" };
 const LOG_FILTERS = [
-  ["all", "Tout"],
-  ["quiet", "Sans recherches"],
-  ["buys", "Achats"],
-  ["alerts", "Alertes"],
+  ["all", "All"],
+  ["quiet", "Hide searches"],
+  ["buys", "Purchases"],
+  ["alerts", "Alerts"],
 ];
 
 let root = null;
 let ticker = null;
-// Abonnements globaux du panneau : remplacés (jamais cumulés) si le panneau est recréé.
+// Global panel subscriptions: replace (never accumulate) when the panel is recreated.
 let unsubscribers = [];
 
 export const injectStyles = () => {
@@ -68,28 +68,28 @@ const shellHtml = () => `
     <header class="mb-head">
       <div class="mb-logo">MB</div>
       <div class="mb-title"><strong>MagicBuyer</strong><small>Sniper FC 27 · v${VERSION}</small></div>
-      <button type="button" class="mb-icon-btn" data-action="close" aria-label="Fermer le panneau" title="Fermer">×</button>
+      <button type="button" class="mb-icon-btn" data-action="close" aria-label="Close panel" title="Close">×</button>
     </header>
     <div class="mb-bar">
       <div class="mb-state" data-state data-status="idle">
         <span class="mb-dot"></span>
-        <span class="mb-state-text"><b data-state-label>À l'arrêt</b><small data-state-detail></small></span>
+        <span class="mb-state-text"><b data-state-label>Idle</b><small data-state-detail></small></span>
       </div>
-      <button type="button" class="mb-btn mb-btn-start" data-action="start">▶ Démarrer</button>
+      <button type="button" class="mb-btn mb-btn-start" data-action="start">▶ Start</button>
       <button type="button" class="mb-btn mb-btn-pause" data-action="pause" hidden>❚❚ Pause</button>
       <button type="button" class="mb-btn mb-btn-stop" data-action="stop" hidden>■ Stop</button>
     </div>
     <div class="mb-kpis">
-      <div class="mb-kpi"><span>Recherches</span><strong data-kpi="searches">0</strong></div>
+      <div class="mb-kpi"><span>Searches</span><strong data-kpi="searches">0</strong></div>
       <div class="mb-kpi"><span>/ minute</span><strong data-kpi="rate">0</strong></div>
-      <div class="mb-kpi is-good"><span>Achats</span><strong data-kpi="won">0</strong></div>
-      <div class="mb-kpi"><span>Ratés</span><strong data-kpi="missed">0</strong></div>
-      <div class="mb-kpi"><span>Dépensé</span><strong data-kpi="spent">0</strong></div>
-      <div class="mb-kpi"><span>Profit estimé</span><strong data-kpi="profit">0</strong></div>
+      <div class="mb-kpi is-good"><span>Purchases</span><strong data-kpi="won">0</strong></div>
+      <div class="mb-kpi"><span>Missed</span><strong data-kpi="missed">0</strong></div>
+      <div class="mb-kpi"><span>Spent</span><strong data-kpi="spent">0</strong></div>
+      <div class="mb-kpi"><span>Estimated profit</span><strong data-kpi="profit">0</strong></div>
       <div class="mb-kpi"><span>Coins</span><strong data-kpi="coins">—</strong></div>
-      <div class="mb-kpi"><span>Durée</span><strong data-kpi="time">00:00:00</strong></div>
+      <div class="mb-kpi"><span>Duration</span><strong data-kpi="time">00:00:00</strong></div>
     </div>
-    <div class="mb-next" aria-hidden="true"><div class="mb-next-fill" data-next-fill></div><span class="mb-next-label" data-next-label>Prêt</span></div>
+    <div class="mb-next" aria-hidden="true"><div class="mb-next-fill" data-next-fill></div><span class="mb-next-label" data-next-label>Ready</span></div>
     <nav class="mb-tabs" role="tablist">
       ${TABS.map((tab) => `<button type="button" class="mb-tab" role="tab" data-tab="${tab.id}">${tab.label}</button>`).join("")}
     </nav>
@@ -97,20 +97,20 @@ const shellHtml = () => `
       ${TABS.map((tab) => `<div class="mb-page" role="tabpanel" data-page="${tab.id}">${tab.html()}</div>`).join("")}
     </div>
     <section class="mb-log" data-log>
-      <div class="mb-log-resize" data-log-resize title="Glisser pour redimensionner"></div>
+      <div class="mb-log-resize" data-log-resize title="Drag to resize"></div>
       <div class="mb-log-head">
-        <strong>Journal</strong>
+        <strong>Log</strong>
         ${LOG_FILTERS.map(([id, label]) => `<button type="button" class="mb-log-filter" data-log-filter="${id}">${label}</button>`).join("")}
-        <button type="button" class="mb-icon-btn" data-action="export" title="Exporter les transactions (CSV)" aria-label="Exporter">⇩</button>
-        <button type="button" class="mb-icon-btn" data-action="clear-log" title="Vider le journal" aria-label="Vider le journal">⌫</button>
-        <button type="button" class="mb-icon-btn" data-action="collapse-log" title="Réduire / agrandir" aria-label="Réduire le journal">▾</button>
+        <button type="button" class="mb-icon-btn" data-action="export" title="Export transactions (CSV)" aria-label="Export">⇩</button>
+        <button type="button" class="mb-icon-btn" data-action="clear-log" title="Clear log" aria-label="Clear log">⌫</button>
+        <button type="button" class="mb-icon-btn" data-action="collapse-log" title="Collapse / expand" aria-label="Collapse log">▾</button>
       </div>
       <ol class="mb-log-list" data-log-list aria-live="polite"></ol>
     </section>
   </aside>
 `;
 
-// ------------------------------------------------------------------ journal
+// ------------------------------------------------------------------ log
 
 const logMatches = (entry, filter) => {
   if (filter === "quiet") {
@@ -140,8 +140,8 @@ const renderLogs = () => {
   qsa(root, "[data-log-filter]").forEach((btn) => toggleClass(btn, "is-active", btn.dataset.logFilter === filter));
 };
 
-// Rendu du journal regroupé à la prochaine image : écrire un log ne coûte rien au moteur
-// (aucune mise en page forcée entre une recherche et l'achat qui suit).
+// Batch log rendering on the next frame: writing a log costs the engine nothing
+// (no forced layout between a search and the subsequent purchase).
 let pendingLogs = [];
 let logFrame = 0;
 
@@ -184,10 +184,10 @@ const appendLog = (entry) => {
 };
 
 const exportCsv = () => {
-  const rows = [["heure", "type", "carte", "note", "prix", "bénéfice", "filtre"]];
+  const rows = [["time", "type", "card", "rating", "price", "profit", "filter"]];
   getTransactions().forEach((t) =>
     rows.push([
-      new Date(t.time).toLocaleString("fr-FR"),
+      new Date(t.time).toLocaleString("en-US"),
       t.type,
       t.name,
       t.rating || "",
@@ -198,7 +198,7 @@ const exportCsv = () => {
   );
   const stats = getState().stats;
   rows.push([]);
-  rows.push(["recherches", stats.searches, "achats", stats.won, "dépensé", stats.spent, "profit estimé", stats.estProfit]);
+  rows.push(["searches", stats.searches, "purchases", stats.won, "spent", stats.spent, "estimated profit", stats.estProfit]);
   const csv = rows
     .map((row) => row.map((cell) => `"${String(cell == null ? "" : cell).replace(/"/g, '""')}"`).join(";"))
     .join("\n");
@@ -210,7 +210,7 @@ const exportCsv = () => {
   link.remove();
 };
 
-// --------------------------------------------------------------- affichage
+// --------------------------------------------------------------- display
 
 const stateDetail = (state) => {
   if (state.status === STATUS.IDLE || state.status === STATUS.STOPPED) {
@@ -218,10 +218,10 @@ const stateDetail = (state) => {
       return state.detail;
     }
     const filters = runnableFilters();
-    return filters.length > 1 ? `${filters.length} filtres prêts` : describeFilter(getActiveFilter());
+    return filters.length > 1 ? `${filters.length} filters ready` : describeFilter(getActiveFilter());
   }
   if (state.status === STATUS.PAUSED) {
-    return "Clique sur Reprendre pour continuer";
+    return "Click Resume to continue";
   }
   return state.filterName || describeFilter(getActiveFilter());
 };
@@ -229,26 +229,26 @@ const stateDetail = (state) => {
 const nextLabel = (state, now) => {
   const remaining = Math.max(0, (state.nextSearchAt || 0) - now);
   if (state.status === STATUS.AUTO_PAUSE) {
-    return `Pause automatique · reprise dans ${formatDuration(remaining)}`;
+    return `Automatic pause · resuming in ${formatDuration(remaining)}`;
   }
   if (state.status === STATUS.COOLDOWN) {
-    return `Pause de sécurité · reprise dans ${formatDuration(remaining)}`;
+    return `Safety pause · resuming in ${formatDuration(remaining)}`;
   }
   if (state.status === STATUS.PAUSED) {
-    return "En pause";
+    return "Paused";
   }
   if (state.status === STATUS.STOPPING) {
     return isFinalizing()
-      ? "Mise en vente des cartes achetées… (Stop pour interrompre)"
-      : "Arrêt en cours (fin de la requête en cours)…";
+      ? "Listing purchased cards… (Stop to interrupt)"
+      : "Stopping (finishing the current request)…";
   }
   if (state.status === STATUS.RUNNING) {
-    return state.nextSearchAt ? `Prochaine recherche dans ${(remaining / 1000).toFixed(1)} s` : "Recherche en cours…";
+    return state.nextSearchAt ? `Next search in ${(remaining / 1000).toFixed(1)} s` : "Searching…";
   }
   if (state.status === STATUS.STARTING) {
-    return "Synchronisation avec EA…";
+    return "Synchronizing with EA…";
   }
-  return "Prêt";
+  return "Ready";
 };
 
 const paintState = () => {
@@ -270,7 +270,7 @@ const paintState = () => {
   const pauseBtn = qs(root, '[data-action="pause"]');
   const stopBtn = qs(root, '[data-action="stop"]');
   startBtn.hidden = stopping || (running && !isPaused());
-  setText(startBtn, isPaused() ? "▶ Reprendre" : "▶ Démarrer");
+  setText(startBtn, isPaused() ? "▶ Resume" : "▶ Start");
   pauseBtn.hidden = !running || isPaused() || stopping;
   stopBtn.hidden = !running;
   stopBtn.disabled = stopping && !isFinalizing();
@@ -333,7 +333,7 @@ const startTicker = () => {
   }, 250);
 };
 
-// --------------------------------------------------------------- montage
+// --------------------------------------------------------------- mounting
 
 const bindShell = () => {
   const body = qs(root, "[data-body]");
@@ -386,7 +386,7 @@ const bindShell = () => {
         pauseBot();
         break;
       case "stop":
-        stopBot("arrêt manuel", { manual: true });
+        stopBot("manual stop", { manual: true });
         break;
       case "clear-log":
         clearLogs();
