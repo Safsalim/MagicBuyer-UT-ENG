@@ -2,7 +2,7 @@ module.exports = {
   headers: {
     name: "MagicBuyer-UT",
     namespace: "http://tampermonkey.net/",
-    version: "5.1.2",
+    version: "5.1.3",
     description: "Sniper / autobuyer for the EA FC 27 Ultimate Team web app",
     author: "AMINE1921",
     match: [
@@ -25,8 +25,8 @@ module.exports = {
       "api.telegram.org",
     ],
     updateURL:
-      "https://github.com/AMINE1921/MagicBuyer-UT/releases/latest/download/fut-auto-buyer.user.js",
+      "https://raw.githubusercontent.com/Safsalim/MagicBuyer-UT-ENG/master/dist/fut-auto-buyer.meta.js",
     downloadURL:
-      "https://github.com/AMINE1921/MagicBuyer-UT/releases/latest/download/fut-auto-buyer.user.js",
+      "https://raw.githubusercontent.com/Safsalim/MagicBuyer-UT-ENG/master/dist/fut-auto-buyer.user.js",
   },
 };
