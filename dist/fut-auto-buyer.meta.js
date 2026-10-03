@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        MagicBuyer-UT
-// @version     5.1.2
+// @version     5.1.3
 // @author      AMINE1921
 // @description Sniper / autobuyer for the EA FC 27 Ultimate Team web app
 // @match       https://www.ea.com/*/ea-sports-fc/ultimate-team/web-app*
@@ -23,6 +23,6 @@
 // @connect     discord.com
 // @connect     discordapp.com
 // @connect     api.telegram.org
-// @updateURL   https://github.com/AMINE1921/MagicBuyer-UT/releases/latest/download/fut-auto-buyer.user.js
-// @downloadURL https://github.com/AMINE1921/MagicBuyer-UT/releases/latest/download/fut-auto-buyer.user.js
+// @updateURL   https://raw.githubusercontent.com/Safsalim/MagicBuyer-UT-ENG/master/dist/fut-auto-buyer.meta.js
+// @downloadURL https://raw.githubusercontent.com/Safsalim/MagicBuyer-UT-ENG/master/dist/fut-auto-buyer.user.js
 // ==/UserScript==

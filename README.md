@@ -13,10 +13,14 @@ FUTBIN SBC solutions and buying missing players, and configurable pauses and sto
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome, Edge, or Brave.
    On recent Chrome versions, enable **“Allow user scripts”** in Tampermonkey's extension details.
-2. Open `fut-auto-buyer.user.js` from the [latest release](https://github.com/AMINE1921/MagicBuyer-UT/releases/latest) and click **Install**.
+2. Open the [userscript from this repository](https://raw.githubusercontent.com/Safsalim/MagicBuyer-UT-ENG/master/dist/fut-auto-buyer.user.js) and click **Install**.
 3. Open the [FC 27 web app](https://www.ea.com/ea-sports-fc/ultimate-team/web-app/) and log in.
 
 Your account must have transfer market access unlocked.
+
+Updates are checked against this repository's `master` branch. If you installed version 5.1.2 or
+earlier, reinstall once using the link above: those versions still point to the original project's
+releases, so their automatic update check cannot discover this fork's corrected update settings.
 
 ## Quick start
 
