@@ -4,6 +4,7 @@ import { getPage } from "./core/page";
 import { flushSettings, getSettings } from "./core/settings";
 import { hookCardPrices } from "./ui/cardPrices";
 import { bootFutbinBridge, isFutbinPage } from "./ui/futbinBridge";
+import { bootFutbinTabBridge } from "./ui/futbinTabBridge";
 import { tickEaHooks } from "./ui/eaHooks";
 import { ensureHud } from "./ui/hud";
 import { ensurePanel, injectStyles, openPanel } from "./ui/panel";
@@ -64,6 +65,10 @@ const boot = () => {
 };
 
 if (isFutbinPage()) {
+  bootFutbinTabBridge();
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) bootFutbinTabBridge();
+  });
   bootFutbinBridge();
 } else if (isTopFrame() && !window.__mbBooted) {
   window.__mbBooted = true;

@@ -1,6 +1,8 @@
 import { log } from "../../core/logger";
 import { formatCoins } from "../../core/prices";
 import { fetchFutbinPrice, futbinRequestCount, resolveFutbinLink } from "../../prices/futbinClient";
+import { futbinErrorMessage } from "../../prices/futbinErrors";
+import { futbinTabAvailable } from "../futbinTabBridge";
 import { clearFutbinCache, getFutbinStatus, pricePlatform } from "../../prices/priceService";
 import { escapeHtml, qs, setHtml } from "../dom";
 import { grid, numberField, rangeField, section, selectField, toggleField } from "../fields";
@@ -18,7 +20,7 @@ const STATE_TEXT = {
 
 const ago = (timestamp) => {
   if (!timestamp) {
-    return "jamais";
+    return "never";
   }
   const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
   return seconds < 60 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
@@ -35,6 +37,7 @@ const statusHtml = () => {
       ${cell("Pending", status.queue)}
       ${cell("Last price fetched", ago(status.lastSuccessAt))}
       ${cell("FUTBIN requests", futbinRequestCount())}
+      ${cell("FUTBIN tab", futbinTabAvailable() ? "connected" : "not connected")}
     </div>${
       status.lastError || blocked
         ? `<div class="mb-note is-warn" style="margin-top:8px">${escapeHtml(status.lastError || "FUTBIN throttled")}${
@@ -54,7 +57,7 @@ export const futbinPageHtml = () => `
        <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-futbin-action="clear">Clear price cache</button>
      </div>
      <div data-futbin-test></div>
-     <p class="mb-hint">Prices are fetched from FUTBIN pages (as in your browser). Requests run one at a time, spaced out, with automatic throttling if FUTBIN blocks them.</p>`
+     <p class="mb-hint">If direct requests fail, keep a FUTBIN tab open in the same browser profile with MagicBuyer enabled in Violentmonkey/Tampermonkey. The “FUTBIN tab” status should show “connected”. Requests are spaced out and paused when FUTBIN blocks them.</p>`
   )}
   ${section(
     "Price refresh",
@@ -77,7 +80,7 @@ export const futbinPageHtml = () => `
         bind: "s:prices.iframeFallback",
         label: "Fallback: hidden FUTBIN page",
         wide: true,
-        hint: "If FUTBIN rejects the direct request (Cloudflare), load the page in an invisible iframe.",
+        hint: "Try an invisible iframe after direct requests and the open FUTBIN tab fail. Some sites or browsers block these frames.",
       })
     )
   )}
@@ -116,29 +119,25 @@ const runTest = async (out) => {
   // Explicit test: retry the direct request even if FUTBIN recently rejected it.
   const resolved = await resolveFutbinLink(TEST_CARD, { forceDirect: true });
   if (!resolved.ok) {
-    const message = resolved.blocked
-      ? "FUTBIN requires verification (Cloudflare). Click “Open futbin.com”, complete the verification if shown, then test again."
-      : resolved.notFound
+    const message = resolved.notFound
       ? "FUTBIN responds, but the test card cannot be found: the FUTBIN search format may have changed."
-      : `FUTBIN is not responding${resolved.status ? ` (${resolved.status})` : ""}.`;
+      : futbinErrorMessage(resolved);
     out.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">✗ ${escapeHtml(message)}</div>`;
     log.warn(`FUTBIN test: ${message}`);
     return;
   }
   const platform = pricePlatform();
   const price = await fetchFutbinPrice(resolved.link, platform, { forceDirect: true });
-  const seconds = ((Date.now() - started) / 1000).toFixed(1).replace(".", ",");
+  const seconds = ((Date.now() - started) / 1000).toFixed(1);
   if (!price.ok) {
-    const message = price.blocked
-      ? "the player page is blocked by Cloudflare"
-      : price.noPrice
+    const message = price.noPrice
       ? "the player page was fetched but its price cannot be found (FUTBIN format changed?)"
-      : `the player page is not responding${price.status ? ` (${price.status})` : ""}`;
-    out.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">✗ Search OK, but ${escapeHtml(message)}.</div>`;
-    log.warn(`Test FUTBIN : ${message}.`);
+      : futbinErrorMessage(price);
+    out.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">✗ Search OK. ${escapeHtml(message)}</div>`;
+    log.warn(`FUTBIN test: ${message}`);
     return;
   }
-  const via = price.via === "iframe" ? "hidden page (fallback)" : "direct request";
+  const via = price.via === "tab" ? "open FUTBIN tab" : price.via === "iframe" ? "hidden page (fallback)" : "direct request";
   const age = price.updatedAgoSec ? ` · updated by FUTBIN ${Math.round(price.updatedAgoSec / 60)} min ago` : "";
   out.innerHTML = `<div class="mb-note" style="margin-top:8px">✓ FUTBIN accessible (${escapeHtml(via)}) : ${escapeHtml(
     resolved.link.name || TEST_CARD.name

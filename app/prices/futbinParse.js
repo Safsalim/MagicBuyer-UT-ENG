@@ -62,15 +62,21 @@ export const absoluteUrl = (path) => {
   return `${FUTBIN_ORIGIN}${text.startsWith("/") ? "" : "/"}${text}`;
 };
 
+// A normal page can include Cloudflare's challenge-platform JavaScript too.
+// Only interstitial titles/forms establish that verification is required.
+export const looksLikeVerification = (text) =>
+  /<title[^>]*>\s*(?:Just a moment[^<]*|Attention Required[^<]*)<\/title>|\bid\s*=\s*["'](?:challenge-form|challenge-platform)["']|\bclass\s*=\s*["'][^"']*\bcf-browser-verification\b/i.test(String(text || ""));
+
 // Cloudflare blocking page (or FUTBIN 403 error) rather than a real page.
 export const looksBlocked = (text) => {
   const body = String(text || "");
+  if (looksLikeVerification(body)) {
+    return true;
+  }
   if (/price-box|"playerImage"/.test(body)) {
     return false;
   }
-  return /cf-browser-verification|just a moment|challenge-platform|cf-chl-|Oops, there was an error - 403|Attention Required/i.test(
-    body
-  );
+  return /Oops, there was an error - 403/i.test(body);
 };
 
 // ------------------------------------------------------------------ search
@@ -141,7 +147,7 @@ const textOf = (el) => (el ? String(el.textContent || "").replace(/[ \t\n\r\f\v]
 
 // Cloudflare verification page parsed as a document (title + challenge markers).
 const blockedDocument = (doc, bodyText) =>
-  looksBlocked(`${doc.title || ""} ${bodyText}`) ||
+  /^(Just a moment|Attention Required)/i.test(doc.title || "") || looksBlocked(bodyText) ||
   !!doc.querySelector("#challenge-platform, #challenge-form, #cf-wrapper, .cf-browser-verification");
 
 const priceFromSentence = (text, platform) => {

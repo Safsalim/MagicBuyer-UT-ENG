@@ -1,9 +1,10 @@
 {
   "name": "MagicBuyer-UT",
-  "version": "5.1.1",
+  "version": "5.1.2",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "test:futbin": "node --test tests/futbin.test.cjs",
     "build:dev": "NODE_OPTIONS=--openssl-legacy-provider webpack --mode development",
     "build:prod": "NODE_OPTIONS=--openssl-legacy-provider webpack --mode production",
     "serve": "NODE_OPTIONS=--openssl-legacy-provider webpack serve --mode development",

@@ -2,6 +2,7 @@ import { getSettings } from "../core/settings";
 import { loadJson, saveJson } from "../core/storage";
 import { getUserPlatform } from "../utils/userUtil";
 import { absoluteUrl, isPlausiblePrice } from "./futbinParse";
+import { futbinErrorMessage } from "./futbinErrors";
 import {
   fetchFutbinPrice,
   futbinDirectPausedUntil,
@@ -340,8 +341,6 @@ const markSuccess = () => {
 const baseRecord = (id) =>
   records.get(id) || { definitionId: id, price: 0, prices: [], fetchedAt: 0, unchanged: 0, failures: 0, suspect: null };
 
-const BLOCKED_MESSAGE = "FUTBIN requires verification (Cloudflare): FUTBIN tab → “Open futbin.com”";
-
 const setRecord = (id, record, patch) => {
   records.set(id, Object.assign(record, patch));
   emit(id);
@@ -353,7 +352,7 @@ const handleFailure = (id, record, result, now, link) => {
     // Direct request recently rejected: displayed cards wait without sending requests.
     setRecord(id, record, { status: "paused", nextRetryAt: Math.max(futbinDirectPausedUntil(), now + ERROR_RETRY) });
   } else if (result.blocked) {
-    markBlocked(BLOCKED_MESSAGE);
+    markBlocked(futbinErrorMessage(result));
     setRecord(id, record, { status: "error", nextRetryAt: status.blockedUntil });
   } else if (result.noPrice) {
     setRecord(id, record, { status: "miss", url: link ? link.url : record.url, nextRetryAt: now + NO_PRICE_RETRY });

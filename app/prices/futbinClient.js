@@ -2,18 +2,20 @@ import { getFutShortYear } from "../app.constants";
 import { getSettings } from "../core/settings";
 import { sendExternalRequest } from "../services/externalRequest";
 import { fetchViaIframe } from "../ui/futbinBridge";
+import { fetchViaFutbinTab, futbinTabAvailable } from "../ui/futbinTabBridge";
 import {
   FUTBIN_ORIGIN,
   absoluteUrl,
   htmlToDocument,
   looksBlocked,
+  looksLikeVerification,
   parsePlayerDocument,
   parseSearchJson,
   parseSquadText,
 } from "./futbinParse";
 
-// FUTBIN network access: direct request (with your FUTBIN cookies), then a hidden iframe
-// fallback if Cloudflare blocks it. Each function returns { ok, … } and never rejects.
+// FUTBIN network access: extension request, then the normal FUTBIN tab's session,
+// then an optional hidden iframe. Returns { ok, … } without solving challenges.
 
 export const futbinYear = () => getFutShortYear() || "27";
 
@@ -29,8 +31,9 @@ const IFRAME_GAP = 5000;
 
 let lastRequestAt = 0;
 let lastIframeAt = 0;
-// Direct request rejected (Cloudflare): do not retry for 3 minutes (unless explicitly requested).
+// Rejected direct requests pause for 3 minutes; network failures pause for 30 seconds.
 let directPausedUntil = 0;
+let lastDirectFailure = { ok: false, blocked: true, status: 403 };
 export const futbinDirectPausedUntil = () => (directPausedUntil > Date.now() ? directPausedUntil : 0);
 
 // Used by tests.
@@ -38,6 +41,7 @@ export const resetFutbinClientForTests = () => {
   lastRequestAt = 0;
   lastIframeAt = 0;
   directPausedUntil = 0;
+  lastDirectFailure = { ok: false, blocked: true, status: 403 };
   iframeFailures = 0;
   iframePausedUntil = 0;
 };
@@ -99,7 +103,9 @@ const viaIframe = async (url, timeoutMs) => {
 
 // Fetch a FUTBIN page. Responses: { ok, text, via } or { ok: false, notFound | blocked | deferred, status }.
 // options: json, allowIframe (hidden page fallback), forceDirect (retry the direct request immediately).
+// An open FUTBIN tab can also serve displayed-card requests without creating frames.
 export const fetchFutbinText = async (url, { json = false, allowIframe = true, forceDirect = false } = {}) => {
+  let failure = lastDirectFailure;
   if (forceDirect || !futbinDirectPausedUntil()) {
     await pace();
     const res = await directGet(url, json ? JSON_ACCEPT : HTML_ACCEPT);
@@ -111,20 +117,38 @@ export const fetchFutbinText = async (url, { json = false, allowIframe = true, f
       return { ok: false, notFound: true, status: 404 };
     }
     const blocked = res.status === 403 || res.status === 429 || res.status === 503 || looksBlocked(res.text);
-    if (!blocked) {
-      // Network or server error: simple failure, retried later.
+    failure = { ok: false, blocked, verification: looksLikeVerification(res.text), status: res.status };
+    if (!blocked && res.status !== 0) {
       return { ok: false, status: res.status };
     }
-    directPausedUntil = Date.now() + DIRECT_PAUSE;
+    lastDirectFailure = failure;
+    directPausedUntil = Date.now() + (blocked ? DIRECT_PAUSE : 30000);
+  }
+  if (failure.status === 429 || (failure.status === 503 && !failure.verification)) return failure;
+  if (futbinTabAvailable()) {
+    await pace();
+    requestCount += 1;
+    const res = await fetchViaFutbinTab(url, { json });
+    if (res && res.status === 200 && !looksBlocked(res.text)) {
+      return { ok: true, text: res.text, via: "tab" };
+    }
+    if (res && res.status === 404) return { ok: false, notFound: true, status: 404 };
+    if (res && res.status) {
+      failure = { ok: false, status: res.status, blocked: [403, 429, 503].includes(res.status) || looksBlocked(res.text), verification: looksLikeVerification(res.text) };
+    }
+  }
+  // Do not multiply requests while the server is rate limiting or unavailable.
+  if (failure.status === 429 || (failure.status === 503 && !failure.verification)) {
+    return failure;
   }
   if (!allowIframe) {
-    return { ok: false, blocked: true, deferred: true, status: 403 };
+    return Object.assign({}, failure, { deferred: true });
   }
   const payload = await viaIframe(url, 15000);
   if (payload) {
     return { ok: true, text: payload.text, via: "iframe" };
   }
-  return { ok: false, blocked: true, status: 403 };
+  return failure;
 };
 
 export const searchFutbin = async (query, options = {}) => {
@@ -205,7 +229,7 @@ export const fetchFutbinPrice = async (link, platform, options = {}) => {
   const doc = htmlToDocument(res.text);
   const parsed = parsePlayerDocument(doc, platform);
   if (parsed.blocked) {
-    return { ok: false, blocked: true };
+    return { ok: false, blocked: true, verification: looksLikeVerification(res.text) };
   }
   if (!parsed.price) {
     return { ok: false, noPrice: true };
@@ -237,7 +261,7 @@ export const fetchFutbinSquad = async (url) => {
     }
   }
   if (parsed.blocked) {
-    return { ok: false, blocked: true };
+    return { ok: false, blocked: true, verification: looksLikeVerification(res.text) };
   }
   if (!parsed.players.length) {
     return { ok: false, empty: true };
