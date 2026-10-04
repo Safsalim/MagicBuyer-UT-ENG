@@ -128,38 +128,6 @@ test("strict FUTBIN adapters preserve edition, platform, grouped quality and abs
   assert.equal(parser.parseChemistryTable(chemistry, { edition: "26", platform: "console", name: "Anchor" }), 0);
 });
 
-test("EA discovery finds third cheapest beyond arbitrary expensive first pages, deduplicates and excludes own", async () => {
-  const e = env({ "app/core/market.js": { auctionOf: (i) => i._auction, marketPageSize: () => 20, searchMarket: () => { throw Error("must mock search"); } } });
-  const discover = e.load("app/prices/eaQuote.js").discoverEaQuote;
-  const items = [e.item(1, 800), e.item(1, 800), e.item(2, 900), e.item(3, 1000), e.item(4, 150, { _auction: { tradeId: "4", buyNowPrice: 150, expires: 100, tradeOwner: true } }), ...Array.from({ length: 100 }, (_, i) => e.item(100 + i, 10000 + i * 250))].reverse();
-  const caps = [];
-  const result = await discover(exactManager(e), { search: async (criteria, page) => {
-    caps.push(criteria.maxBuy);
-    const hits = items.filter((i) => i._auction.buyNowPrice <= criteria.maxBuy);
-    return { ok: true, items: hits.slice((page - 1) * 20, page * 20 + 1) };
-  } });
-  assert.equal(result.price, 1000); assert.ok(result.requests <= 20); assert.equal(result.status, "available");
-  assert.equal(caps[caps.length - 1], 1000); assert.equal(caps[caps.length - 2], 1000);
-});
-
-test("EA sparse, unstable, exhausted and cancelled discovery is unavailable", async () => {
-  const e = env({ "app/core/market.js": { auctionOf: (i) => i._auction, marketPageSize: () => 20 } });
-  const discover = e.load("app/prices/eaQuote.js").discoverEaQuote;
-  const searchFor = (items) => async (c) => ({ ok: true, items: items.filter((i) => i._auction.buyNowPrice <= c.maxBuy) });
-  assert.equal((await discover(exactManager(e), { search: searchFor([e.item(1), e.item(2)]) })).price, 0);
-  assert.equal((await discover(exactManager(e), { search: searchFor([e.item(1), e.item(2), e.item(3)]), budget: 2 })).price, 0);
-  let calls = 0;
-  const unstable = await discover(exactManager(e), { search: async (c) => {
-    calls += 1;
-    const items = [e.item(1), e.item(2), e.item(calls > 14 ? calls : 3)];
-    return searchFor(items)(c);
-  } });
-  assert.equal(unstable.price, 0);
-  const token = { cancelled: false };
-  const cancelled = await discover(exactManager(e), { token, search: async () => { token.cancelled = true; return { ok: true, items: [e.item(1), e.item(2), e.item(3)] }; } });
-  assert.equal(cancelled.price, 0); assert.equal(cancelled.requests, 1);
-});
-
 test("one EA lane spaces reads but dispatches Buy Now ahead of waiting reference reads", async () => {
   const e = env({ "app/core/settings.js": { getSettings: () => ({ timing: { wait: "5", maxPerMinute: 10 }, errors: { cooldown: "1M" } }) } });
   const queue = e.load("app/core/requestQueue.js"); const token = e.load("app/core/async.js").createCancelToken();
@@ -201,7 +169,7 @@ test("EA reads share configured pacing and urgent purchases still respect rate c
 function tradingEnv() {
   const calls = { bids: [], listings: [], moves: [], searches: [] };
   const state = { stats: { won: 0 }, transfer: null };
-  const reference = { price: 2000, status: "available", fetchedAt: Date.now(), source: "EA third-cheapest BIN" };
+  const reference = { price: 2000, status: "available", fetchedAt: Date.now(), source: "FUTBIN chemistry style" };
   const m = { auctionOf: (i) => i._auction, nameOf: () => "Manager", ratingOf: (i) => i.rating || 0,
     baseIdOf: (i) => i.definitionId & 0xffffff, isGoalkeeper: () => true,
     marketPageSize: () => 20, pileCapacity: () => 100, isPileFull: () => false,
@@ -352,36 +320,35 @@ test("bulk execution rechecks active state, stale references, cancellation and c
   token.cancel(); assert.equal((await bulk.listMatchingPreview({ preview, token })).listed, 0);
 });
 
-test("non-player quote fallback, cache age, platform separation and specific-item restriction", async () => {
-  let platform = "console"; let eaRequests = 0; let futbinRequests = 0;
+test("external references preserve cache age, platform separation and specific-item restriction", async () => {
+  let platform = "console"; let futbinRequests = 0;
   const e = env({
-    "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async () => { futbinRequests += 1; return { ok: false, status: 403 }; } },
+    "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async () => { futbinRequests += 1; return { ok: true, text: chemistryHtml }; } },
     "app/prices/priceService.js": { pricePlatform: () => platform },
-    "app/prices/eaQuote.js": { discoverEaQuote: async () => { eaRequests += 1; return { status: "available", price: 2000, source: "EA third-cheapest BIN", fetchedAt: Date.now() }; } },
   });
   const quotes = e.load("app/prices/nonPlayerQuotes.js");
-  const f = exactManager(e, { selectedItem: e.targets.targetIdentity(e.item()) });
-  const first = await quotes.requestItemQuote(f); assert.equal(first.source, "EA third-cheapest BIN");
-  await quotes.requestItemQuote(f); assert.equal(eaRequests, 1); assert.equal(futbinRequests, 1);
+  const f = hunterFilter(e);
+  const first = await quotes.requestItemQuote(f); assert.equal(first.source, "FUTBIN chemistry style");
+  await quotes.requestItemQuote(f); assert.equal(futbinRequests, 1);
   first.fetchedAt -= 61000;
   assert.equal(quotes.currentItemQuote(f, 60000), null); assert.ok(quotes.currentItemQuote(f));
-  await quotes.requestItemQuote(f, { maxAge: 60000 }); assert.equal(eaRequests, 2);
+  const refreshed = await quotes.requestItemQuote(f, { maxAge: 60000 }); assert.ok(refreshed.fetchedAt > first.fetchedAt);
   platform = "pc"; assert.equal(quotes.currentItemQuote(f), null);
-  await quotes.requestItemQuote(f); assert.equal(eaRequests, 3);
+  assert.equal((await quotes.requestItemQuote(f)).price, 3400);
   const broad = await quotes.requestItemQuote(exactManager(e, { definitionId: 0 }));
-  assert.equal(broad.price, 0); assert.equal(eaRequests, 3);
+  assert.equal(broad.price, 0);
   const restricted = exactManager(e, { selectedItem: e.targets.targetIdentity(e.item()), league: 13 });
-  await quotes.requestItemQuote(restricted); assert.equal(futbinRequests, 3, "league-modified manager skips grouped FUTBIN reference");
+  assert.equal((await quotes.requestItemQuote(restricted)).price, 0);
+  assert.equal(futbinRequests, 1, "league-modified manager skips grouped FUTBIN reference");
 });
 
 test("a native Hunter choice fetches FUTBIN without a result, separates styles/platforms and rejects broad choices", async () => {
-  let platform = "console"; let reads = 0; let fallback = 0;
+  let platform = "console"; let reads = 0;
   const e = env({
     "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async (url) => {
       assert.equal(url, "https://www.futbin.com/consumables"); reads += 1; return { ok: true, text: chemistryHtml };
     } },
     "app/prices/priceService.js": { pricePlatform: () => platform },
-    "app/prices/eaQuote.js": { discoverEaQuote: async () => { fallback += 1; throw Error("unexpected fallback"); } },
   });
   const quotes = e.load("app/prices/nonPlayerQuotes.js"); const f = hunterFilter(e);
   assert.equal(f.definitionId, 0); assert.equal(f.selectedItem, null);
@@ -398,28 +365,28 @@ test("a native Hunter choice fetches FUTBIN without a result, separates styles/p
     assert.equal(e.targets.hasReferenceTarget(invalid), false);
     assert.equal((await quotes.requestItemQuote(invalid)).price, 0);
   }
-  assert.equal(reads, 1); assert.equal(fallback, 0);
+  assert.equal(reads, 1);
 });
 
-test("Hunter EA fallback discovers only matching native style auctions without a definition ID", async () => {
-  const calls = [];
-  const e = env({
-    "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async () => ({ ok: false, status: 403 }) },
-    "app/prices/priceService.js": { pricePlatform: () => "console" },
-    "app/core/market.js": { marketPageSize: () => 20, auctionOf: (i) => i._auction,
-      searchMarket: async (criteria) => {
-        calls.push(criteria);
-        const items = [e.item(1, 800, { type: "training", subtype: 251 }), e.item(2, 900, { type: "training", subtype: 251 }),
-          e.item(3, 1000, { type: "training", subtype: 251 }), e.item(4, 200, { type: "training", subtype: 250 }),
-          e.item(5, 200, { type: "training", subtype: 251, _auction: { tradeId: "5", expires: 100, buyNowPrice: 200, tradeOwner: true } })];
-        return { ok: true, items: items.filter((i) => i._auction.buyNowPrice <= criteria.maxBuy) };
-      } },
-  });
-  const quotes = e.load("app/prices/nonPlayerQuotes.js");
-  const quote = await quotes.requestItemQuote(hunterFilter(e));
-  assert.equal(quote.price, 1000); assert.equal(quote.source, "EA third-cheapest BIN"); assert.equal(quote.referenceIdentity, "style:Hunter");
-  assert.ok(calls.length > 2 && calls.length <= 20);
-  calls.forEach((c) => { assert.equal(c.playStyle, 251); assert.equal(c.type, "training"); assert.equal(c.category, "playStyle"); assert.equal(c.defId.length, 0); });
+test("failed external references never search EA, including retries, unsupported items and cancellation", async () => {
+  for (const failure of [{ ok: false, status: 403 }, { ok: false, status: 429 }, { ok: false, status: 503 }, { ok: false, status: 0 },
+    { ok: true, text: "<h1>EA FC 26 Chemistry Styles</h1>" }]) {
+    let searches = 0; let externalReads = 0;
+    const e = env({
+      "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async () => { externalReads += 1; return failure; } },
+      "app/prices/priceService.js": { pricePlatform: () => "console" },
+      "app/core/market.js": { searchMarket: async () => { searches += 1; throw Error("EA lookup must never run"); } },
+    });
+    const quotes = e.load("app/prices/nonPlayerQuotes.js"); const f = hunterFilter(e);
+    assert.equal((await quotes.requestItemQuote(f)).price, 0);
+    await quotes.requestItemQuote(f); assert.equal(externalReads, 1, "unavailable references are cached");
+    await quotes.requestItemQuote(f, { force: true });
+    assert.equal((await quotes.requestItemQuote(exactManager(e, { selectedItem: e.targets.targetIdentity(e.item()) }))).price, 0);
+    const unsupported = exactManager(e, { selectedItem: e.targets.targetIdentity(e.item()), league: 13 });
+    assert.match((await quotes.requestItemQuote(unsupported)).reason, /EA price lookup is disabled/);
+    assert.equal((await quotes.requestItemQuote(f, { force: true, token: { cancelled: true } })).reason, "cancelled");
+    assert.equal(searches, 0);
+  }
 });
 
 test("Hunter percentage pricing passes preflight and read-only preview, and still waits for a missing quote", async () => {
@@ -446,7 +413,6 @@ test("chemistry selection clears an old exact item, displays its quote and makes
     "app/core/engine.js": { isRunning: () => false },
     "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async () => ({ ok: true, text: chemistryHtml }) },
     "app/prices/priceService.js": { pricePlatform: () => "console", currentPrice: () => 0, getPriceRecord: () => null, onPriceUpdate: () => () => {}, trackPrice: () => () => {} },
-    "app/prices/eaQuote.js": { discoverEaQuote: async () => { throw Error("EA unavailable"); } },
   });
   e.context.setInterval = () => 0;
   const f = e.filters.addFilter(hunterFilter(e, { definitionId: 9001, selectedItem: e.targets.targetIdentity(e.item(1, 1000, { type: "training", subtype: 250 })) }));
@@ -463,8 +429,8 @@ test("chemistry selection clears an old exact item, displays its quote and makes
   e.dp.getPlayStyleDP = () => [{ id: 252, value: "252", label: "Unknown localized style" }];
   e.filters.updateFilter(f.id, { playStyle: 252 });
   const unavailable = await quotes.requestItemQuote(e.filters.getActiveFilter());
-  assert.equal(unavailable.price, 0); assert.equal(quotes.itemQuoteRecord(e.filters.getActiveFilter()).reason, "EA unavailable");
-  assert.match(target.targetPageHtml(), /EA unavailable/); assert.match(target.targetPageHtml(), /Refresh reference/);
+  assert.equal(unavailable.price, 0); assert.match(quotes.itemQuoteRecord(e.filters.getActiveFilter()).reason, /no usable price/);
+  assert.match(target.targetPageHtml(), /no usable price/); assert.match(target.targetPageHtml(), /Refresh reference/);
 });
 
 test("target controls reset dependent criteria and reject a Test search completed after target changes", async () => {

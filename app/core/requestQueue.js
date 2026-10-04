@@ -3,7 +3,7 @@ import { isFatal, KIND } from "./errors";
 import { getSettings } from "./settings";
 import { pickSeconds } from "./ranges";
 
-// All EA requests share this lane, including read-only price discovery.
+// EA trading requests share this lane. Price references use external transport.
 const pending = [];
 let busy = false;
 let nextAt = 0;

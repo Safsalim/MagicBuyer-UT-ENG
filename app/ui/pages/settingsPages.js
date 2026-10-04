@@ -214,7 +214,7 @@ export const transferPageHtml = () => `
           ["same", "At the same price"],
           ["futbin", "Matching filters at current reference prices"],
         ],
-        hint: "FUTBIN first, EA fallback for non-player items. Missing references leave existing prices unchanged. Broad filters require fixed prices.",
+        hint: "References use external prices only. Missing references leave existing prices unchanged. Broad filters and unsupported items require fixed prices.",
       }),
       numberField({ bind: "s:transfer.clearSoldAt", label: "Clear sold cards after", placeholder: "never", hint: "sold cards (0 = never)" }),
       numberField({ bind: "s:transfer.checkEvery", label: "Check every", min: 1, max: 100, hint: "searches" }),
@@ -358,7 +358,7 @@ const runMatchingListing = async (body, execute) => {
     if (!execute) {
       matchingPreview = null;
       listBtn.hidden = true;
-      out.innerHTML = `<div class="mb-note" role="status">Preparing prices… EA discovery may use up to 20 paced searches per specific item. Stop cancels remaining requests.</div>`;
+      out.innerHTML = `<div class="mb-note" role="status">Preparing external reference prices… Stop cancels remaining work.</div>`;
       const preview = await previewMatchingItems({ filter: getActiveFilter(), token: task.token });
       if (task.token.cancelled) { out.innerHTML = `<div class="mb-note">Preview cancelled.</div>`; return; }
       if (!preview.ok) { out.innerHTML = `<div class="mb-note is-warn">${escapeHtml(preview.error.label)}</div>`; return; }

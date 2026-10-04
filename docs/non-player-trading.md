@@ -16,7 +16,7 @@ apply only to players. Saved player filters retain their previous defaults.
 
 Set a fixed Buy Now price and run **Test search (without buying)**. Click a matching result's name
 to select its exact definition and native item identity. Imported EA searches preserve category,
-definition and restrictive criteria; imports without identity metadata use EA for automatic pricing.
+definition and restrictive criteria. Automatic pricing requires a supported external reference.
 **Stop test** cancels queued discovery/search work. Changing the filter also cancels a running test
 and invalidates its results, including late responses.
 
@@ -24,7 +24,8 @@ Starting with 5.2.2, choosing a specific native chemistry style (for example Hun
 fetch an automatic reference: no Test search result is required. Changing style clears any old
 exact selection and reference. All styles remains broad and requires fixed prices.
 
-Broad targets need fixed buy and sell prices. Exact non-player targets and specific chemistry styles can use percentage pricing:
+Broad targets and items without a supported external reference need fixed buy and sell prices.
+Supported manager country/quality targets and specific chemistry styles can use percentage pricing:
 the initial buy percentage is 80%, sell is 95%, and both remain editable. A fixed buy price caps the
 percentage ceiling. A missing or stale reference produces no automatic Buy Now ceiling. Explicit
 bidding caps continue to use the existing bid expiry, reserve and active-bid rules.
@@ -33,22 +34,22 @@ bidding caps continue to use the existing bid expiry, reserve and active-bid rul
 
 | Target | First source | Fallback |
 | --- | --- | --- |
-| Selected manager with country/quality metadata and no league, club or rarity modifier | FUTBIN country/quality group | EA exact target |
-| Specific chemistry style chosen in the dropdown or from a result | FUTBIN chemistry-style row | EA matching native style and criteria |
-| Other selected managers, club items and consumables | EA exact target | No guessed price |
+| Selected manager with country/quality metadata and no league, club or rarity modifier | FUTBIN country/quality group | Fixed price if unavailable |
+| Specific chemistry style chosen in the dropdown or from a result | FUTBIN chemistry-style row | Fixed price if unavailable |
+| Other selected managers, club items and consumables | Fixed price | Automatic pricing unavailable |
 | Broad criterion/subtype | Fixed price | Automatic pricing unavailable |
 
 FUTBIN manager references are grouped country/quality prices, rather than an individual manager's
 valuation. The UI displays that source explicitly. The adapters read the public
 [FC 27 manager table](https://www.futbin.com/27/manager-prices) and
 [consumable table](https://www.futbin.com/consumables), require the matching edition and console/PC
-column, and reject absent prices. Unsupported markup or access failure falls back to EA.
+column, and reject absent prices. Unsupported markup or access failure returns unavailable.
 
-EA discovery searches only the exact target or specific native chemistry style and its criteria. It finds the lowest native price tier
-containing at least three distinct matching Buy Now auctions, excluding your own listings and expired
-auctions. It paginates saturated results, sorts locally and requires two complete matching scans at
-that ceiling to agree. The reference is their third-cheapest price. Discovery stops after 20 requests;
-sparse, unstable, incomplete, cancelled or budget-exhausted results return unavailable.
+Starting with 5.2.3, EA price discovery is removed. Fetching, refreshing and retrying a reference
+never invokes the signed-in account's market search service. Missing references leave the automatic
+buy ceiling unavailable and automatic resale unpriced. Normal Test search and bot trading still
+use EA services when explicitly run; external-only references do not remove the autobuyer's
+automation and account-enforcement risks.
 
 References are keyed by edition, platform, group, native type/subtype, exact identity and criteria.
 Buy references expire after five minutes. Resale and matching listing request references no older
@@ -84,7 +85,7 @@ a known cost and use the normal after-tax profit check.
 
 ## Validation
 
-`npm test` runs the existing FUTBIN transport tests and category, parser, discovery, request queue,
+`npm test` runs the existing FUTBIN transport tests and category, parser, external-reference, request queue,
 purchase, bid, resale, relist, bulk preview and UI state regressions. Fixtures are synthetic and never
 send trading requests. The production userscript is rebuilt in `dist/fut-auto-buyer.user.js`.
 
@@ -99,9 +100,13 @@ its reference and capped buy ceiling, switching to Anchor, and refreshing the re
 prices came from synthetic FUTBIN HTML through a mocked extension transport. All 32 tests passed,
 including real EA discovery logic against synthetic auctions and percentage resale calculation.
 
+For 5.2.3, regression checks confirm zero EA market searches for price references after external
+403/429/503/network failures, mismatched edition data, retries, unsupported targets and cancellation.
+Those checks use a mocked EA search function which records and rejects any attempted call.
+
 For a read-only check in your signed-in browser:
 
-1. Install the local rebuilt userscript and reload EA. Verify version 5.2.2 and existing player filters.
+1. Install the local rebuilt userscript and reload EA. Verify version 5.2.3 and existing player filters.
 2. Choose each exposed non-player group. Check native subtype options and dependent criteria resets.
 3. Run Test search with a fixed ceiling. Select a matching result and verify its exact ID and group.
 4. Change a criterion during another test; the old results must clear. Test Stop test as well.

@@ -39,13 +39,14 @@ and click **⚡ Snipe this search** to create a filter with exactly those criter
 ## Non-player trading (5.2.0)
 
 Managers, club items and consumables use EA's runtime categories and data providers; unavailable
-categories or criteria are hidden. Exact targets and specific chemistry styles support automatic reference prices; broad filters
-require fixed buy and sell prices. New non-player filters default to **80% buy** and **95% sell**,
+categories or criteria are hidden. Specific chemistry styles and supported manager country/quality
+targets support automatic external reference prices. Broad filters and unsupported items require
+fixed buy and sell prices. New non-player filters default to **80% buy** and **95% sell**,
 both editable. Player defaults and player-only rules remain unchanged.
 
 Manager country/quality groups and chemistry styles use FUTBIN when a supported price is available.
-Other exact targets fall back to a bounded EA search for the third-cheapest distinct matching Buy Now
-auction, excluding your own listings. Sparse, unstable or incomplete results produce no reference.
+Starting with 5.2.3, price lookup never falls back to searches through your signed-in EA account.
+An unavailable external reference leaves automatic pricing unavailable; use fixed prices instead.
 EA reads share the configured pacing and cooldowns; purchases take priority and skip search spacing.
 
 **Transfers → List matching items** previews the selected filter's eligible items, reference source
@@ -158,6 +159,12 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 ```
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
+
+## What's new in 5.2.3
+
+- Removed EA market price discovery. External price failures, retries and unsupported targets
+  never trigger EA market searches for a reference. Missing references require fixed prices.
+- Updated Target and Transfers guidance to describe external-only price references.
 
 ## What's new in 5.2.2
 
