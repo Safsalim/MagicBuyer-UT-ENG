@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        MagicBuyer-UT
-// @version     5.1.3
+// @version     5.2.0
 // @author      AMINE1921
-// @description Sniper / autobuyer for the EA FC 27 Ultimate Team web app
+// @description Search, buy, bid and list players, managers, club items and consumables in EA FC 27
 // @match       https://www.ea.com/*/ea-sports-fc/ultimate-team/web-app*
 // @match       https://www.ea.com/ea-sports-fc/ultimate-team/web-app*
 // @match       https://www.futbin.com/*

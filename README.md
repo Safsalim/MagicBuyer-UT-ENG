@@ -1,8 +1,8 @@
 # MagicBuyer-UT — sniper for the EA FC 27 web app
 
 A Tampermonkey script that adds a sniper / autobuyer to the **EA SPORTS FC 27 Ultimate Team** web app:
-continuous transfer market searches, instant purchases below your maximum price (fixed or a percentage
-of the live FUTBIN price), automatic listing at FUTBIN prices, FUTBIN prices on every card, importing
+continuous player, manager, club-item and consumable searches, instant purchases below your maximum price
+(fixed or a percentage of a market reference), automatic listing, FUTBIN prices on player cards, importing
 FUTBIN SBC solutions and buying missing players, and configurable pauses and stopping conditions.
 
 > ⚠️ **Read before using.** Automating the web app violates EA's terms of service.
@@ -25,7 +25,8 @@ releases, so their automatic update check cannot discover this fork's corrected 
 ## Quick start
 
 1. Click the **MagicBuyer** tab (EA navigation bar) or the **MB** badge in the bottom-right corner.
-2. In the **Target** tab, enter the player's name and select them from the list.
+2. In the **Target** tab, choose **Item group**. For players, search by name. For managers,
+   club items and consumables, choose a subtype and native criteria, then select an exact **Test search** result.
 3. Enter the **Max buy price** (Buy Now) and, if you want to resell, the **Sell price**
    (the panel shows the net proceeds after EA's 5% tax and the profit per card).
 4. Click **Test search (without buying)** to see the market results (green shows what the bot would buy).
@@ -34,9 +35,26 @@ releases, so their automatic update check cannot discover this fork's corrected 
 Alternatively, configure your search in EA's **Transfers → Transfer Market** (rarity, position, play style…)
 and click **⚡ Snipe this search** to create a filter with exactly those criteria.
 
-## FUTBIN prices
+## Non-player trading (5.2.0)
 
-All pricing features use **FUTBIN** (pages fetched as in your browser, using the console or PC platform
+Managers, club items and consumables use EA's runtime categories and data providers; unavailable
+categories or criteria are hidden. Exact targets support automatic reference prices; broad filters
+require fixed buy and sell prices. New non-player filters default to **80% buy** and **95% sell**,
+both editable. Player defaults and player-only rules remain unchanged.
+
+Manager country/quality groups and chemistry styles use FUTBIN when a supported price is available.
+Other exact targets fall back to a bounded EA search for the third-cheapest distinct matching Buy Now
+auction, excluding your own listings. Sparse, unstable or incomplete results produce no reference.
+EA reads share the configured pacing and cooldowns; purchases take priority and skip search spacing.
+
+**Transfers → List matching items** previews the selected filter's eligible items, reference source
+and proposed prices before listing. Reference relisting checks enabled matching filters; missing
+prices leave items unchanged. See [non-player trading and validation notes](docs/non-player-trading.md)
+for source coverage, matching limits and a read-only installation check.
+
+## Player FUTBIN prices
+
+Player pricing features use **FUTBIN** (pages fetched as in your browser, using the console or PC platform
 for your account). In the **FUTBIN** tab, click **Test FUTBIN** to check access.
 
 - **Buy at a percentage of FUTBIN price** (Target tab → Buy price → Mode): for example, 90%; the max buy
@@ -44,7 +62,7 @@ for your account). In the **FUTBIN** tab, click **Test FUTBIN** to check access.
   Without a recent FUTBIN price (less than 5 minutes old), the filter waits: never buy using an outdated price.
 - **Sell at a percentage of FUTBIN price** (Sell tab, or per filter): the purchased version's price is refreshed
   immediately after buying. Without a FUTBIN price, the card goes to the transfer list without being listed.
-- **Relist at FUTBIN prices** and the **List at FUTBIN prices** button (Transfers tab) for available and unsold cards.
+- **Reference relisting** and **List matching items** (Transfers tab) for matching available and unsold items.
 - **Price badge** at the top of every player card (club, market, transfers, squads, SBCs); click to open its FUTBIN page.
 - **EA's listing panel**: the card's FUTBIN price and a **Fill in** button (confirm with EA's button).
 
@@ -81,7 +99,8 @@ and EA rate limits stop purchasing immediately; the **Stop** button interrupts i
 
 - **Fresh results on every search**: the web app cache is cleared and each request is different
   (automatic cache busting varies the max bid *above* your max buy price, so no purchasable listing is excluded).
-- **Instant purchase** as soon as EA responds, without waiting for FUTBIN or any other request.
+- **Priority purchase** as soon as EA responds, without the configured delay between searches.
+  An EA request already in flight must finish; cooldowns and stop conditions still apply.
 - **Cheapest first**, then most recent at equal prices; your own listings are ignored.
 - **Reselling after purchases**, never during them: the next search is not delayed.
 - **Keep tab active in the background**: Chrome throttles hidden tabs; the “Keep tab active” option prevents this
@@ -91,11 +110,11 @@ and EA rate limits stop purchasing immediately; the **Stop** button interrupts i
 
 | Tab | Settings |
 | --- | --- |
-| **Target** | Saved filters, filter rotation, player, quality, position, min/max rating, buy price (fixed or live FUTBIN percentage, cap), sell price (Sell tab, fixed or FUTBIN percentage), max bid, advanced IDs (exact version, rarity, nation, league, club, style). |
+| **Target** | Saved filters, rotation, item group, subtype, native criteria, exact item, player-only position/rating, buy and sell prices (fixed or reference percentage, cap), max bid, advanced IDs. |
 | **Buy** | Max purchases per search, stop after N purchases, coin reserve, result threshold, skip goalkeepers, bidding (expiry window, rebidding, max active bids). |
 | **Sell** | Automatic listing / send to transfer list / leave unassigned, fixed price or FUTBIN percentage, duration, minimum profit. |
 | **Timing** | Cautious / Normal / Fast profiles, search delay, max searches per minute, pause every N searches, pause duration, automatic stop, delay after buying, cache busting, pages to search, safety pause on EA rate limits. |
-| **Transfers** | List status, relist unsold cards (same price or FUTBIN price), bulk listing at FUTBIN prices, clear sold cards, stop if the list is full. |
+| **Transfers** | List status, relist unsold items (same price or matching reference), preview and list matching items, clear sold items, stop if the list is full. |
 | **FUTBIN** | Access test, price platform, refresh frequency, price jump guard, card badges, SBC purchasing settings. |
 | **Alerts** | Sounds, browser notifications, Discord webhook, Telegram bot, and event selection. |
 
@@ -128,7 +147,26 @@ npm install
 npm run build:prod
 ```
 
+With the repository's existing legacy webpack peer/lockfile mismatch, install without rewriting the
+lockfile using `npm install --ignore-scripts --legacy-peer-deps --package-lock=false`. On Windows PowerShell:
+
+```powershell
+npm test
+$env:NODE_OPTIONS = '--openssl-legacy-provider'
+.\node_modules\.bin\webpack.cmd --mode production
+```
+
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
+
+## What's new in 5.2.0
+
+- Category-aware manager, club-item and consumable filters with exact selection from Test search.
+- FUTBIN-first non-player references with fail-closed EA discovery, editable 80%/95% defaults,
+  fresh resale references, bids and mixed player/non-player rotation.
+- Shared EA request pacing with priority purchases, cancellation and cooldown handling.
+- Matching transfer listing previews and reference relisting, with immutable configuration and
+  final checks for identity, eligibility, stale prices, EA limits and minimum profit.
+- Test results clear when their target changes; League/Quality changes reset dependent criteria.
 
 ## What's new in 5.1.1
 

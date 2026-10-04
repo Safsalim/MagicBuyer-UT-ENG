@@ -39,7 +39,7 @@ export const sellModeFor = (filter, sell) => {
 };
 
 export const sellPercentFor = (filter, sell) =>
-  filter && filter.sellMode === "futbin" && filter.sellPercent ? filter.sellPercent : sell.futbinPercent;
+  filter && filter.sellPercent && (filter.sellMode === "futbin" || filter.itemGroup !== "players") ? filter.sellPercent : sell.futbinPercent;
 
 export const fixedSellPriceFor = (filter, sell) =>
   roundPrice((filter && filter.sellMode === "fixed" && toInt(filter.sellPrice)) || toInt(sell.defaultPrice));
@@ -63,5 +63,6 @@ export const prepareListing = async (item, price) => {
   if (start >= buyNow) {
     start = priceBelow(buyNow) || start;
   }
-  return { buyNow, start, limits };
+  return { buyNow, start, limits, valid: !!(buyNow >= 150 && start >= 150 && start < buyNow &&
+    (!limits || (!limits.min || start >= limits.min) && (!limits.max || buyNow <= limits.max))) };
 };

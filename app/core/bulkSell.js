@@ -1,6 +1,9 @@
 import { sleep, withTimeout } from "./async";
 import { KIND, isFatal } from "./errors";
-import { durationSeconds, futbinSellPrice, prepareListing } from "./listing";
+import { durationSeconds, futbinSellPrice, prepareListing, sellModeFor, sellPercentFor, fixedSellPriceFor } from "./listing";
+import { hasExactTarget, matchesItem, targetIdentity } from "./itemTargets";
+import { normalizeFilter, filterHasTarget } from "./filters";
+import { requestItemQuote } from "../prices/nonPlayerQuotes";
 import { log } from "./logger";
 import * as market from "./market";
 import { formatCoins } from "./prices";
@@ -40,6 +43,80 @@ const listable = (item, includeExpired) => {
     return includeExpired;
   }
   return !safeCall(auction, "isActiveTrade");
+};
+
+export const matchingListable = (item, filter, includeExpired = true) => {
+  if (item.untradeable || item.tradable === false || item.tradeable === false || safeCall(item, "isUntradeable") || !matchesItem(item, filter)) return false;
+  const auction = market.auctionOf(item);
+  if (!auction || !auction.tradeId || String(auction.tradeId) === "0") return true;
+  if (safeCall(auction, "isSold") || safeCall(auction, "isSelling") || safeCall(auction, "isActiveTrade") || auction.expires > 0) return false;
+  return safeCall(auction, "isExpired") ? includeExpired : true;
+};
+
+export const matchingListingPrice = async (item, filter, sell, token) => {
+  if (sellModeFor(filter, sell) === "fixed") return { price: fixedSellPriceFor(filter, sell), source: "Fixed price", fetchedAt: Date.now() };
+  if (!hasExactTarget(filter)) return { price: 0, reason: "Broad filters require fixed prices" };
+  if (filter.itemGroup !== "players") {
+    const quoteFilter = normalizeFilter(Object.assign({}, filter, { selectedItem: targetIdentity(item), definitionId: Number(item.definitionId) }));
+    const quote = await requestItemQuote(quoteFilter, { token, maxAge: 60000 });
+    return Object.assign({}, quote, { reference: quote.price, price: quote.price ? futbinSellPrice(quote.price, sellPercentFor(filter, sell)).price : 0 });
+  }
+  const id = Number(item.definitionId);
+  if (!currentPrice(id, 60000, "sell")) await withTimeout(requestPrice(id, { name: market.nameOf(item), rating: market.ratingOf(item) }), 25000);
+  const reference = currentPrice(id, 60000, "sell");
+  return { reference, price: reference ? futbinSellPrice(reference, sellPercentFor(filter, sell)).price : 0, source: "FUTBIN player", fetchedAt: Date.now() };
+};
+
+// A preview has no listing side effects. Its frozen filter/settings travel with every row.
+export const previewMatchingItems = async ({ filter, token, items, expiredOnly = false, limit = Infinity, sell = getSettings().sell }) => {
+  const snapshot = normalizeFilter(JSON.parse(JSON.stringify(filter)));
+  if (!filterHasTarget(snapshot)) return { ok: false, error: { label: "Choose a specific item, subtype, or restrictive criterion first" }, rows: [] };
+  const config = Object.assign({}, sell);
+  const result = items ? { ok: true, items } : await market.fetchTransferList();
+  if (!result.ok) return { ok: false, error: result.error, rows: [] };
+  const rows = [];
+  for (const item of result.items) {
+    if (rows.length >= limit || token && token.cancelled) break;
+    if (!matchingListable(item, snapshot) || expiredOnly && !safeCall(market.auctionOf(item), "isExpired")) continue;
+    const quote = await matchingListingPrice(item, snapshot, config, token);
+    if (quote.error && stopsTask(quote.error)) return { ok: false, error: quote.error, rows };
+    const listing = quote.price ? await prepareListing(item, quote.price) : null;
+    const reason = !quote.price ? quote.reason || "Reference unavailable" : !listing.valid ? "EA price limits prevent listing" : config.minProfit > 0 ? "Purchase cost unknown: cannot verify minimum profit" : "";
+    rows.push({ item, itemId: String(item.id), name: market.nameOf(item), filter: snapshot, sell: config, quote,
+      start: listing && listing.start || 0, buyNow: listing && listing.buyNow || 0, reason, previewedAt: Date.now() });
+  }
+  return { ok: true, rows, filter: snapshot, sell: config, previewedAt: Date.now() };
+};
+
+export const listMatchingPreview = async ({ preview, token, onProgress = () => {} }) => {
+  const report = { total: preview.rows.length, listed: 0, skipped: 0, stopped: "" };
+  const list = await market.fetchTransferList();
+  if (!list.ok) return Object.assign(report, { stopped: list.error.label });
+  const fresh = new Map(list.items.map((item) => [String(item.id), item]));
+  for (const row of preview.rows) {
+    if (token && token.cancelled) { report.stopped = "stop requested"; break; }
+    const item = fresh.get(row.itemId);
+    if (row.reason || !item || !matchingListable(item, row.filter)) { report.skipped += 1; continue; }
+    // An accepted preview never silently changes the proposed price.
+    if (sellModeFor(row.filter, row.sell) === "futbin" && Date.now() - row.quote.fetchedAt > 60000) {
+      const quote = await matchingListingPrice(item, row.filter, row.sell, token);
+      if (quote.error && stopsTask(quote.error)) { report.stopped = quote.error.label; break; }
+      if (!quote.price || quote.price !== row.quote.price) { report.skipped += 1; continue; }
+    }
+    const listing = await prepareListing(item, row.buyNow);
+    if (!listing.valid || listing.buyNow !== row.buyNow) { report.skipped += 1; continue; }
+    if (token && token.cancelled) break;
+    const result = await market.listOnMarket(item, listing.start, listing.buyNow, durationSeconds(row.sell.duration));
+    if (result.ok) {
+      report.listed += 1;
+      recordTransaction({ type: "matching listing", name: row.name, price: listing.buyNow, filter: row.filter.name });
+    } else {
+      report.skipped += 1;
+      if (stopsTask(result.error)) { report.stopped = result.error.label; break; }
+    }
+    onProgress(report);
+  }
+  return report;
 };
 
 const stopsTask = (error) =>

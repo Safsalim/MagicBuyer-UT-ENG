@@ -1,4 +1,6 @@
-import { listTransferAtFutbin } from "../../core/bulkSell";
+import { previewMatchingItems, listMatchingPreview } from "../../core/bulkSell";
+import { getActiveFilter } from "../../core/filters";
+import { setRequestToken } from "../../core/requestQueue";
 import { isRunning } from "../../core/engine";
 import * as market from "../../core/market";
 import { log } from "../../core/logger";
@@ -7,7 +9,7 @@ import { formatCoins } from "../../core/prices";
 import { TIMING_PRESETS, applyTimingPreset, getSettings, setSetting } from "../../core/settings";
 import { getState, updateState } from "../../core/state";
 import { beginTask, cancelTask, currentTask, endTask } from "../../core/tasks";
-import { qs, setHtml } from "../dom";
+import { escapeHtml, qs, setHtml } from "../dom";
 import {
   grid,
   numberField,
@@ -82,14 +84,14 @@ export const sellPageHtml = () => `
         wide: true,
         options: [
           ["fixed", "Fixed price"],
-          ["futbin", "% of the purchased card's FUTBIN price"],
+          ["futbin", "% of purchased item's reference price"],
         ],
         hint: "Each filter can have its own setting (Target tab).",
       }),
       priceField({ bind: "s:sell.defaultPrice", label: "Default sell price", wide: true, showIf: "s:sell.priceMode=fixed" }),
       rangeField({
         bind: "s:sell.futbinPercent",
-        label: "% of FUTBIN price",
+        label: "Sell reference % (players)",
         unit: null,
         placeholder: "99-100",
         wide: true,
@@ -190,10 +192,11 @@ export const transferPageHtml = () => `
       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="clear">Clear sold cards</button>
     </div>`)}
   ${section(
-    "Listing at FUTBIN prices",
-    `<p class="mb-hint">List available and unsold cards from your transfer list at the current FUTBIN price (percentage and duration from the Sell tab).</p>
+    "List matching items",
+    `<p class="mb-hint">Preview available and expired items matching the selected Target filter. Prices follow that filter and the Sell tab. Active, sold, untradeable and unsupported items are skipped.</p>
      <div class="mb-row" style="margin-top:8px">
-       <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-transfer-action="futbin">List at FUTBIN prices</button>
+       <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-transfer-action="matching-preview">Preview matching items</button>
+       <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-transfer-action="matching-list" hidden>List previewed items</button>
        <button type="button" class="mb-btn mb-btn-danger mb-btn-sm" data-transfer-action="futbin-stop" hidden>Stop</button>
      </div>
      <div data-transfer-futbin></div>`
@@ -201,7 +204,7 @@ export const transferPageHtml = () => `
   ${section(
     "Automatic while the bot runs",
     grid(
-      toggleField({ bind: "s:transfer.relistExpired", label: "Relist unsold cards", wide: true, hint: "Warning: applies to ALL expired cards in the list." }),
+      toggleField({ bind: "s:transfer.relistExpired", label: "Relist unsold items", wide: true, hint: "Same price applies to all expired items. Reference mode only touches matching enabled filters." }),
       selectField({
         bind: "s:transfer.relistMode",
         label: "Relist price",
@@ -209,9 +212,9 @@ export const transferPageHtml = () => `
         showIf: "s:transfer.relistExpired=true",
         options: [
           ["same", "At the same price"],
-          ["futbin", "At the current FUTBIN price (Sell tab percentage)"],
+          ["futbin", "Matching filters at current reference prices"],
         ],
-        hint: "At FUTBIN prices: 5 cards per pass; without a FUTBIN price after 3 minutes, relist at the same price.",
+        hint: "FUTBIN first, EA fallback for non-player items. Missing references leave existing prices unchanged. Broad filters require fixed prices.",
       }),
       numberField({ bind: "s:transfer.clearSoldAt", label: "Clear sold cards after", placeholder: "never", hint: "sold cards (0 = never)" }),
       numberField({ bind: "s:transfer.checkEvery", label: "Check every", min: 1, max: 100, hint: "searches" }),
@@ -297,8 +300,8 @@ export const bindSettingsPages = (body, refreshAll) => {
         log.warn("The bot is already managing the transfer list: stop it to act manually.");
         return;
       }
-      if (action.dataset.transferAction === "futbin") {
-        await runFutbinListing(body);
+      if (["matching-preview", "matching-list"].includes(action.dataset.transferAction)) {
+        await runMatchingListing(body, action.dataset.transferAction === "matching-list");
         return;
       }
       action.disabled = true;
@@ -330,35 +333,57 @@ export const bindSettingsPages = (body, refreshAll) => {
   });
 };
 
-// Bulk listing at FUTBIN prices, with progress tracking and a Stop button.
-const runFutbinListing = async (body) => {
+let matchingPreview = null;
+const runMatchingListing = async (body, execute) => {
   const out = qs(body, "[data-transfer-futbin]");
-  const startBtn = qs(body, '[data-transfer-action="futbin"]');
+  const startBtn = qs(body, '[data-transfer-action="matching-preview"]');
+  const listBtn = qs(body, '[data-transfer-action="matching-list"]');
   const stopBtn = qs(body, '[data-transfer-action="futbin-stop"]');
-  const task = beginTask("FUTBIN listing");
+  const task = beginTask(execute ? "Matching listing" : "Listing preview");
   if (!task) {
     const other = currentTask();
     out.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">Another task is in progress (${other ? other.label : "?"}).</div>`;
     return;
   }
   startBtn.disabled = true;
+  listBtn.disabled = true;
   stopBtn.hidden = false;
+  setRequestToken(task.token);
   const paint = (report) => {
     out.innerHTML = `<div class="mb-note" style="margin-top:8px">${report.listed} listed out of ${report.total}${
       report.skipped ? ` · ${report.skipped} skipped` : ""
     }${report.current ? ` · in progress: ${report.current}` : ""}</div>`;
   };
   try {
-    const report = await listTransferAtFutbin({ token: task.token, onProgress: paint });
-    paint(report);
-    const text = `${report.listed} card(s) listed at FUTBIN prices out of ${report.total}` +
-      (report.noPrice ? ` · ${report.noPrice} without a FUTBIN price` : "") +
-      (report.stopped ? ` · stopped: ${report.stopped}` : "");
-    out.innerHTML = `<div class="mb-note${report.stopped ? " is-warn" : ""}" style="margin-top:8px">${text}.</div>`;
-    log.info(`${text}.`);
+    if (!execute) {
+      matchingPreview = null;
+      listBtn.hidden = true;
+      out.innerHTML = `<div class="mb-note" role="status">Preparing prices… EA discovery may use up to 20 paced searches per specific item. Stop cancels remaining requests.</div>`;
+      const preview = await previewMatchingItems({ filter: getActiveFilter(), token: task.token });
+      if (task.token.cancelled) { out.innerHTML = `<div class="mb-note">Preview cancelled.</div>`; return; }
+      if (!preview.ok) { out.innerHTML = `<div class="mb-note is-warn">${escapeHtml(preview.error.label)}</div>`; return; }
+      matchingPreview = preview;
+      out.innerHTML = `<p class="mb-hint">${escapeHtml(preview.filter.name)} · ${preview.rows.length} matching item(s)</p>
+        <div class="mb-preview"><table><thead><tr><th>Item</th><th>Reference</th><th>Proposed BIN</th></tr></thead><tbody>${preview.rows.map((row) =>
+          `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.reason || row.quote.source)}${row.quote.reference ? ` · ${formatCoins(row.quote.reference)}` : ""}</td><td>${row.reason ? "Skipped" : formatCoins(row.buyNow)}</td></tr>`).join("")}</tbody></table></div>
+        <p class="mb-hint">Changed references or price limits are skipped when listing. Preview again to review new prices.</p>`;
+      listBtn.hidden = !preview.rows.some((row) => !row.reason);
+    } else if (matchingPreview) {
+      const preview = matchingPreview;
+      matchingPreview = null;
+      listBtn.hidden = true;
+      const report = await listMatchingPreview({ preview, token: task.token, onProgress: paint });
+      const summary = `${report.listed} listed · ${report.skipped} skipped${report.stopped ? ` · stopped: ${report.stopped}` : ""}`;
+      out.innerHTML = `<div class="mb-note" role="status">${escapeHtml(summary)}</div>`;
+      log.info(summary);
+    }
+  } catch (e) {
+    out.innerHTML = `<div class="mb-note is-warn">${escapeHtml(e.message || e)}</div>`;
   } finally {
     endTask(task);
+    setRequestToken(null);
     startBtn.disabled = false;
+    listBtn.disabled = false;
     stopBtn.hidden = true;
     await runTransferAction("refresh");
     setHtml(qs(body, "[data-transfer-stats]"), transferStatsHtml());

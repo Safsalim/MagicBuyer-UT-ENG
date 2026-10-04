@@ -1,6 +1,7 @@
 import { pageGlobal, toPageArray } from "./page";
 import { ceilPrice, floorPrice, priceAbove, toInt } from "./prices";
 import { loadJson, loadLegacy, saveJson } from "./storage";
+import { groupForType, hasExactTarget, switchGroupPatch } from "./itemTargets";
 
 // A filter is a snipe target (player / criteria) with buy and sell prices.
 export const DEFAULT_FILTER = {
@@ -8,6 +9,11 @@ export const DEFAULT_FILTER = {
   name: "New filter",
   enabled: true,
   type: "player",
+  itemGroup: "players",
+  selectedItem: null,
+  authenticity: "any",
+  primaryColor: -1,
+  secondaryColor: -1,
   player: null, // { id: baseId, name, rating }
   definitionId: 0, // exact card version (optional)
   level: "any",
@@ -43,6 +49,16 @@ export const normalizeFilter = (raw) => {
   filter.name = String(filter.name || "").trim() || "Filter";
   filter.enabled = filter.enabled !== false;
   filter.type = filter.type || "player";
+  filter.itemGroup = raw && raw.itemGroup || groupForType(filter.type);
+  filter.selectedItem = raw && raw.selectedItem ? Object.assign({}, raw.selectedItem) : null;
+  if (filter.itemGroup !== "players") {
+    filter.player = null;
+    filter.position = "any";
+    filter.zone = -1;
+    filter.minRating = filter.maxRating = 0;
+    if (!raw || raw.futbinPercent == null) filter.futbinPercent = 80;
+    if (!raw || raw.sellPercent == null) filter.sellPercent = "95";
+  }
   const player = filter.player;
   filter.player =
     player && toInt(player.id)
@@ -57,7 +73,7 @@ export const normalizeFilter = (raw) => {
     .map((value) => parseInt(value, 10))
     .filter((value) => Number.isFinite(value) && value >= 0);
   // EA FC 27 zones: 130 defense, 131 midfield, 132 attack (-1 = any).
-  ["nation", "league", "club", "playStyle", "zone"].forEach((key) => {
+  ["nation", "league", "club", "playStyle", "zone", "primaryColor", "secondaryColor"].forEach((key) => {
     const n = parseInt(filter[key], 10);
     filter[key] = Number.isFinite(n) && n > 0 ? n : -1;
   });
@@ -85,7 +101,7 @@ export const normalizeFilter = (raw) => {
 
 // Card whose FUTBIN price is the filter's reference (exact version, otherwise base card).
 export const futbinKeyForFilter = (filter) =>
-  (filter && (filter.definitionId || (filter.player && filter.player.id))) || 0;
+  (filter && filter.itemGroup === "players" && (filter.definitionId || (filter.player && filter.player.id))) || 0;
 
 // Migrate v4 filters (localStorage mbSavedFilters).
 const migrateLegacy = () => {
@@ -175,7 +191,8 @@ export const setActiveFilter = (id) => {
 export const updateFilter = (id, patch) => {
   data = Object.assign({}, data, {
     list: data.list.map((filter) =>
-      filter.id === id ? normalizeFilter(Object.assign({}, filter, patch, { id })) : filter
+      filter.id === id ? normalizeFilter(Object.assign({}, filter,
+        patch.itemGroup && patch.itemGroup !== filter.itemGroup ? switchGroupPatch(patch.itemGroup) : {}, patch, { id })) : filter
     ),
   });
   emit();
@@ -241,8 +258,10 @@ export const runnableFilters = () => {
 // A price alone is not enough (otherwise the bot would buy any player below that price).
 export const filterHasTarget = (filter) =>
   !!(
-    filter &&
-    ((filter.player && filter.player.id) ||
+    filter && ["players", "managers", "club", "consumables"].includes(filter.itemGroup) &&
+    (hasExactTarget(filter) ||
+      (filter.itemGroup !== "players" && filter.category && filter.category !== "any") ||
+      (filter.player && filter.player.id) ||
       filter.definitionId ||
       filter.rarities.length ||
       filter.level !== "any" ||
@@ -261,7 +280,9 @@ export const describeFilter = (filter) => {
     return "No filter";
   }
   const parts = [];
-  if (filter.player) {
+  if (filter.itemGroup !== "players") {
+    parts.push(filter.selectedItem ? filter.selectedItem.name : `${filter.itemGroup} · ${filter.category}`);
+  } else if (filter.player) {
     parts.push(
       `${filter.player.name || "Player"}${filter.player.rating ? ` ${filter.player.rating}` : ""}`
     );
@@ -284,7 +305,7 @@ export const describeFilter = (filter) => {
     parts.push(`rating ${filter.minRating || "…"}–${filter.maxRating || "…"}`);
   }
   if (filter.priceMode === "futbin") {
-    parts.push(`buy ≤ ${filter.futbinPercent} % FUTBIN`);
+    parts.push(`buy ≤ ${filter.futbinPercent} % ${filter.itemGroup === "players" ? "FUTBIN" : "reference"}`);
   }
   return parts.join(" · ");
 };
@@ -345,6 +366,8 @@ export const buildCriteria = (filter, prices = {}) => {
   }
   if (filter.league > 0) {
     criteria.league = filter.league;
+  } else if (filter.itemGroup === "consumables" && filter.selectedItem && filter.selectedItem.league > 0) {
+    criteria.league = filter.selectedItem.league;
   }
   if (filter.club > 0) {
     criteria.club = filter.club;
@@ -352,9 +375,13 @@ export const buildCriteria = (filter, prices = {}) => {
   if (filter.playStyle > 0) {
     criteria.playStyle = filter.playStyle;
   }
+  ["authenticity", "primaryColor", "secondaryColor"].forEach((key) => {
+    if (filter[key] != null && filter[key] !== "any" && filter[key] !== -1) criteria[key] = filter[key];
+  });
   // EA prioritizes defId (exact version) over maskedDefId (all versions).
-  if (filter.definitionId > 0) {
-    criteria.defId = toPageArray([filter.definitionId]);
+  const exactId = filter.definitionId || (filter.selectedItem && filter.selectedItem.definitionId);
+  if (exactId > 0) {
+    criteria.defId = toPageArray([exactId]);
   } else if (filter.player && filter.player.id > 0) {
     criteria.maskedDefId = filter.player.id;
   }
@@ -464,7 +491,14 @@ export const snapshotFromEaCriteria = (criteria, playerData) => {
     const n = parseInt(read(key, -1), 10);
     return Number.isFinite(n) && n > 0 ? n : -1;
   };
+  const type = read("type", "player") === "any" ? "player" : read("type", "player");
+  const itemGroup = groupForType(type);
   return {
+    itemGroup,
+    selectedItem: null,
+    authenticity: read("authenticity", "any"),
+    primaryColor: signed("primaryColor"),
+    secondaryColor: signed("secondaryColor"),
     type: read("type", "player") === "any" ? "player" : read("type", "player"),
     category: read("category", "any"),
     level: read("level", "any"),
@@ -476,7 +510,7 @@ export const snapshotFromEaCriteria = (criteria, playerData) => {
     club: signed("club"),
     playStyle: signed("playStyle"),
     definitionId: defIds && defIds.length ? toInt(defIds[0]) : 0,
-    player,
+    player: itemGroup === "players" ? player : null,
     minBuy: toInt(read("minBuy", 0)),
     maxBuy: toInt(read("maxBuy", 0)),
     maxBid: toInt(read("maxBid", 0)),

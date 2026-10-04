@@ -9,7 +9,12 @@ import {
   futbinKeyForFilter,
   getRotation,
   runnableFilters,
+  getFilters,
 } from "./filters";
+import { hasExactTarget, matchesItem, targetIdentity } from "./itemTargets";
+import { currentItemQuote, requestItemQuote } from "../prices/nonPlayerQuotes";
+import { resetRequestQueue, setRequestToken } from "./requestQueue";
+import { previewMatchingItems, listMatchingPreview } from "./bulkSell";
 import { errorMessage, log } from "./logger";
 import * as market from "./market";
 import { notifyEvent, sound } from "./notify";
@@ -26,7 +31,7 @@ import { afterTax, floorPrice, formatCoins, priceAbove, profitFor, roundPrice, t
 import { formatDuration, parseRange, pickInt, pickSeconds, randomBetween } from "./ranges";
 import { currentPrice, getPriceRecord, onPriceUpdate, requestPrice, trackPrice } from "../prices/priceService";
 import { getSettings } from "./settings";
-import { currentTask } from "./tasks";
+import { currentTask, beginTask, endTask } from "./tasks";
 import {
   STATUS,
   bumpStat,
@@ -114,7 +119,8 @@ const effectiveMaxBuy = (filter) => {
     return cap;
   }
   const key = futbinKeyForFilter(filter);
-  const reference = key ? currentPrice(key, BUY_PRICE_MAX_AGE, "buy") : 0;
+  const quote = filter.itemGroup !== "players" ? currentItemQuote(filter) : null;
+  const reference = quote ? quote.price : key ? currentPrice(key, BUY_PRICE_MAX_AGE, "buy") : 0;
   if (!reference) {
     return 0;
   }
@@ -123,7 +129,7 @@ const effectiveMaxBuy = (filter) => {
 };
 
 const referencePending = (filter) =>
-  filter.priceMode === "futbin" && !!futbinKeyForFilter(filter) && !effectiveMaxBuy(filter);
+  filter.priceMode === "futbin" && hasExactTarget(filter) && !effectiveMaxBuy(filter);
 
 // Priority tracking (≤ 2 minutes) of FUTBIN prices used by the running bot.
 const trackHot = (ctx, key, hint) => {
@@ -172,15 +178,7 @@ const watchFutbinPrices = (ctx) => {
   });
 };
 
-const matchesTarget = (item, filter) => {
-  if (filter.definitionId) {
-    return Number(item.definitionId) === filter.definitionId;
-  }
-  if (filter.player && filter.player.id) {
-    return market.baseIdOf(item) === filter.player.id;
-  }
-  return true;
-};
+const matchesTarget = (item, filter) => matchesItem(item, filter, { fromSearch: true });
 
 const purchaseLimitReached = (settings) => {
   const maxBuys = toInt(settings.buy.stopAfterPurchases);
@@ -205,12 +203,12 @@ const preflight = () => {
   if (!filters.length) {
     return "Choose a player (or at least one criterion: quality, rarity, rating…) in the Target tab.";
   }
-  if (filters.some((filter) => filter.priceMode === "futbin" && !futbinKeyForFilter(filter))) {
-    return "In “% of FUTBIN price” mode, choose a player or an exact version ID (the FUTBIN price belongs to that card).";
+  if (filters.some((filter) => (filter.priceMode === "futbin" || (filter.itemGroup !== "players" && sellModeFor(filter, settings.sell) === "futbin")) && !hasExactTarget(filter))) {
+    return "Automatic pricing requires a specific item. Select a Test search result, or use fixed buy and sell prices for broad filters.";
   }
   const usable = filters.filter(
     (filter) =>
-      (filter.priceMode === "futbin" ? futbinKeyForFilter(filter) : filter.maxBuy) ||
+      (filter.priceMode === "futbin" ? hasExactTarget(filter) : filter.maxBuy) ||
       (settings.bid.enabled && filter.maxBid)
   );
   if (!usable.length) {
@@ -285,6 +283,8 @@ export const startBot = () => {
     warned: new Set(),
   };
   run = ctx;
+  resetRequestQueue();
+  setRequestToken(ctx.token, () => ctx.paused || inCooldown(ctx));
   watchFutbinPrices(ctx);
   resetStats();
   updateState({
@@ -385,6 +385,7 @@ const finalize = async (ctx) => {
       halted: "",
     });
     ctx.finalToken = detached.token;
+    setRequestToken(detached.token);
     updateState({ status: STATUS.STOPPING, detail: "listing purchased cards" });
     await processSellQueue(detached).catch((e) => log.error(`Post-stop selling: ${errorMessage(e)}`));
     if (detached.halted) {
@@ -396,6 +397,7 @@ const finalize = async (ctx) => {
     log.warn(`${ctx.sellQueue.length} purchased card(s) not listed: they are in your unassigned items.`);
   }
   run = null;
+  setRequestToken(null);
   const reason = ctx.stopReason || "stop";
   const stats = getState().stats;
   updateState({
@@ -578,7 +580,10 @@ const nextFilter = (ctx, settings) => {
     .filter(filterHasTarget)
     .forEach((filter) => {
       if (filter.priceMode === "futbin") {
-        trackHot(ctx, futbinKeyForFilter(filter), futbinHint(filter));
+        if (filter.itemGroup === "players") trackHot(ctx, futbinKeyForFilter(filter), futbinHint(filter));
+        else if (!currentItemQuote(filter)) requestItemQuote(filter, { token: ctx.token }).then((quote) => {
+          if (quote.error && !ctx.token.cancelled) handleFailure(ctx, quote.error, "search");
+        });
       }
       const maxBuy = effectiveMaxBuy(filter);
       const bidOn = settings.bid.enabled && toInt(filter.maxBid) > 0;
@@ -627,9 +632,9 @@ const handleNoFilter = (ctx, settings) => {
   const now = Date.now();
   if (!ctx.referenceWaitSince) {
     ctx.referenceWaitSince = now;
-    log.info("Waiting for the FUTBIN price to calculate the max buy price…");
+    log.info("Waiting for a market reference to calculate the max buy price…");
   } else if (now - ctx.referenceWaitSince > REFERENCE_WAIT_MAX) {
-    stopBot("FUTBIN price unavailable for 2 minutes (see the FUTBIN tab for diagnostics)", { alert: true });
+    stopBot("Market reference unavailable for 2 minutes: check the target or use fixed prices", { alert: true });
     return;
   }
   setNotBefore(ctx, now + 5000, "wait");
@@ -715,7 +720,8 @@ const snipeCycle = async (ctx, filter, maxBuy, settings) => {
       log.warn(
         `${filter.name} : ${items.length} listings below ${formatCoins(maxBuy)} (full page): FUTBIN price is above market value (outdated or percentage too high), no purchase. Lower the percentage or set a cap.`
       );
-      requestPrice(futbinKeyForFilter(filter), futbinHint(filter));
+      if (filter.itemGroup === "players") requestPrice(futbinKeyForFilter(filter), futbinHint(filter));
+      else requestItemQuote(filter, { token: ctx.token, force: true });
     }
     return;
   }
@@ -770,11 +776,11 @@ const analyzeResults = (ctx, items, filter, maxBuy, settings, bidOn) => {
       return;
     }
     const rating = market.ratingOf(item);
-    if ((filter.minRating && rating < filter.minRating) || (filter.maxRating && rating > filter.maxRating)) {
+    if (filter.itemGroup === "players" && ((filter.minRating && rating < filter.minRating) || (filter.maxRating && rating > filter.maxRating))) {
       counts.rating += 1;
       return;
     }
-    if (settings.buy.skipGk && market.isGoalkeeper(item)) {
+    if (filter.itemGroup === "players" && settings.buy.skipGk && market.isGoalkeeper(item)) {
       counts.gk += 1;
       return;
     }
@@ -904,7 +910,8 @@ const placeBids = async (ctx, auctions, filter, settings) => {
       ctx.bids.set(entry.tradeId, {
         item: entry.item,
         price,
-        filter,
+        filter: JSON.parse(JSON.stringify(filter)),
+        sell: Object.assign({}, settings.sell),
         name,
         rating: entry.rating,
         endsAt: Date.now() + (Number(auction.expires) || 0) * 1000,
@@ -981,7 +988,7 @@ const checkBids = async (ctx, force) => {
       log.buy(`Bid won: ${bid.name} ${bid.rating} for ${formatCoins(price)}.`);
       recordTransaction({ type: "bid won", name: bid.name, rating: bid.rating, price, filter: bid.filter.name });
       notifyEvent("buy", `🏆 Bid won: ${bid.name} for ${formatCoins(price)} coins`);
-      queueSale(ctx, { item, buyPrice: price, filter: bid.filter, name: bid.name, rating: bid.rating });
+      queueSale(ctx, { item, buyPrice: price, filter: bid.filter, sell: bid.sell, name: bid.name, rating: bid.rating });
     } else if (
       safeCall(auction, "isExpired") ||
       (safeCall(auction, "isClosedTrade") && !safeCall(auction, "isWon"))
@@ -1029,7 +1036,10 @@ const checkBids = async (ctx, force) => {
 const sellKey = (job) => Number(job.item && job.item.definitionId) || 0;
 
 // Request the purchased version's FUTBIN price (unless it is less than a minute old).
-const requestSellPrice = (job) => {
+const requestSellPrice = (job, token) => {
+  if (job.filter.itemGroup !== "players") {
+    return requestItemQuote(job.filter, { token, maxAge: 60000 });
+  }
   const key = sellKey(job);
   if (!key || currentPrice(key, 60 * 1000, "sell")) {
     return Promise.resolve(null);
@@ -1039,12 +1049,18 @@ const requestSellPrice = (job) => {
 };
 
 const queueSale = (ctx, job) => {
-  const entry = Object.assign({ deferrals: 0, requestedAt: 0, queuedAt: Date.now() }, job);
+  const entry = Object.assign({ deferrals: 0, requestedAt: 0, queuedAt: Date.now() }, job, {
+    filter: JSON.parse(JSON.stringify(job.filter)), sell: Object.assign({}, job.sell || getSettings().sell),
+  });
+  if (entry.filter.itemGroup !== "players") {
+    entry.filter.selectedItem = targetIdentity(entry.item);
+    entry.filter.definitionId = Number(entry.item.definitionId);
+  }
   ctx.sellQueue.push(entry);
   // Request the FUTBIN price immediately in the background while the cycle finishes.
-  const sell = getSettings().sell;
+  const sell = entry.sell;
   if (sell.mode === "list" && sellModeFor(entry.filter, sell) === "futbin") {
-    requestSellPrice(entry);
+    requestSellPrice(entry, ctx.token);
   }
 };
 
@@ -1075,6 +1091,14 @@ const sellPriceFor = async (ctx, job, sell) => {
     const price = fixedSellPriceFor(job.filter, sell);
     return { price, reason: price ? "" : "no sell price (filter or Sell tab)" };
   }
+  if (job.filter.itemGroup !== "players") {
+    const quote = await requestItemQuote(job.filter, { token: ctx.token, maxAge: 60000 });
+    if (quote.error) await handleFailure(ctx, quote.error, "transfer", job.name);
+    if (!quote.price || ctx.token.cancelled) return { price: 0, reason: "market reference unavailable" };
+    const { price } = futbinSellPrice(quote.price, sellPercentFor(job.filter, sell));
+    log.info(`${job.name}: ${quote.source} ${formatCoins(quote.price)} → sell ${formatCoins(price)}.`);
+    return { price, reason: "" };
+  }
   const key = sellKey(job);
   let reference = key ? currentPrice(key, SELL_PRICE_MAX_AGE, "sell") : 0;
   if (!reference && key && ctx.finalizing) {
@@ -1101,11 +1125,11 @@ const sellPriceFor = async (ctx, job, sell) => {
 
 // Returns deferred if the sale should be retried on the next cycle.
 const sellJob = async (ctx, job) => {
-  const sell = getSettings().sell;
+  const sell = job.sell || getSettings().sell;
   if (sell.mode === "none") {
     return "done";
   }
-  if (sell.maxRating && job.rating > toInt(sell.maxRating)) {
+  if (job.filter.itemGroup === "players" && sell.maxRating && job.rating > toInt(sell.maxRating)) {
     log.info(`${job.name} (${job.rating}) kept: rating above the sell threshold.`);
     return "done";
   }
@@ -1128,6 +1152,11 @@ const sellJob = async (ctx, job) => {
     return "done";
   }
   const listing = await prepareListing(job.item, plan.price);
+  if (!listing.valid) {
+    log.warn(`${job.name}: EA price limits prevent listing, sent to the transfer list.`);
+    await moveToTransferList(ctx, job);
+    return "done";
+  }
   const price = listing.buyNow;
   const profit = profitFor(job.buyPrice, price);
   const minProfit = toInt(sell.minProfit);
@@ -1245,64 +1274,21 @@ const relistSamePrice = async (ctx, count) => {
   }
 };
 
-// Relist unsold cards at the current FUTBIN price (Sell tab percentage), 5 cards per pass.
-// Retry cards without a FUTBIN price; after 3 minutes without a price, relist at the same price.
+// Reference relisting only touches configured matching targets. Missing prices stay unchanged.
 const relistAtFutbin = async (ctx, items) => {
-  const sell = getSettings().sell;
-  const now = Date.now();
-  const ready = [];
-  const pending = [];
-  items
-    .filter((item) => safeCall(market.auctionOf(item), "isExpired"))
-    .forEach((item) => {
-      const key = Number(item.definitionId) || 0;
-      const reference = key ? currentPrice(key, SELL_PRICE_MAX_AGE, "sell") : 0;
-      if (reference) {
-        ready.push({ item, reference });
-      } else {
-        pending.push(item);
-      }
-    });
-  pending.forEach((item) => {
-    const id = String(item.id);
-    if (!ctx.relistPending.has(id)) {
-      ctx.relistPending.set(id, now);
-    }
-    requestPrice(Number(item.definitionId), { name: market.nameOf(item), rating: market.ratingOf(item) });
-  });
-  const duration = durationSeconds(sell.duration);
-  let listed = 0;
-  for (const entry of ready.slice(0, RELIST_BATCH)) {
-    if (blocked(ctx)) {
-      break;
-    }
-    const name = market.nameOf(entry.item);
-    const { price } = futbinSellPrice(entry.reference, sell.futbinPercent);
-    const listing = await prepareListing(entry.item, price);
-    const res = await market.listOnMarket(entry.item, listing.start, listing.buyNow, duration);
-    if (res.ok) {
-      listed += 1;
-      ctx.relistPending.delete(String(entry.item.id));
-      log.success(`Relisted: ${name} at ${formatCoins(listing.buyNow)} (FUTBIN ${formatCoins(entry.reference)}).`);
-    } else {
-      log.warn(`Relisting ${name} failed: ${res.error.label}.`);
-      await handleFailure(ctx, res.error, "list", name, { quiet: true });
-      break;
-    }
-    await sleep(randomBetween(700, 1500), ctx.token);
-  }
-  if (listed) {
-    ctx.transferDirty = true;
-  }
-  const stale = pending.filter((item) => now - (ctx.relistPending.get(String(item.id)) || now) > RELIST_FALLBACK_AFTER);
-  if (stale.length && ready.length <= RELIST_BATCH && !blocked(ctx)) {
-    log.warn(`${stale.length} unsold card(s) without a FUTBIN price for 3 minutes: relisting at the same price.`);
-    await relistSamePrice(ctx, pending.length);
-    return;
-  }
-  if (pending.length || ready.length > RELIST_BATCH) {
-    // Next pass in ~90 seconds (at the next transfer list check).
-    ctx.lastRelistAt = Date.now() - RELIST_MIN_GAP + RELIST_RETRY;
+  const seen = new Set();
+  let remaining = RELIST_BATCH;
+  for (const filter of getFilters().filter((f) => f.enabled && filterHasTarget(f))) {
+    if (!remaining || blocked(ctx)) break;
+    const preview = await previewMatchingItems({ filter, token: ctx.token, items: items.filter((item) => !seen.has(String(item.id))), expiredOnly: true, limit: remaining,
+      sell: Object.assign({}, getSettings().sell, { priceMode: "futbin" }) });
+    if (!preview.ok) { await handleFailure(ctx, preview.error, "transfer"); break; }
+    preview.rows.forEach((row) => seen.add(row.itemId));
+    remaining -= preview.rows.length;
+    if (blocked(ctx)) break;
+    const report = await listMatchingPreview({ preview, token: ctx.token });
+    if (report.listed) { ctx.transferDirty = true; log.success(`${report.listed} matching item(s) relisted.`); }
+    if (report.stopped) break;
   }
 };
 
@@ -1492,12 +1478,18 @@ const startCooldown = (ctx, error) => {
 // --------------------------------------------------------- test search
 
 // A single search without purchasing to check a filter and see market prices.
-export const previewSearch = async (filter) => {
+const runPreviewSearch = async (filter, token) => {
   if (run) {
     return { ok: false, message: "Stop the bot before running a test search." };
   }
   if (!isAppReady() || !getUser()) {
     return { ok: false, message: "Log in to the EA web app first." };
+  }
+  if (!filterHasTarget(filter)) return { ok: false, message: "Choose a subtype or a restrictive criterion first." };
+  if (filter.priceMode === "futbin" && !hasExactTarget(filter)) return { ok: false, message: "Select a specific Test search result or use fixed prices." };
+  if (filter.itemGroup !== "players" && filter.priceMode === "futbin") {
+    const quote = await requestItemQuote(filter, { token });
+    if (!quote.price) return { ok: false, message: `Reference unavailable: ${quote.reason || "no usable price"}. Use fixed prices to browse.` };
   }
   const key = filter.priceMode === "futbin" ? futbinKeyForFilter(filter) : 0;
   if (key && !effectiveMaxBuy(filter)) {
@@ -1508,7 +1500,7 @@ export const previewSearch = async (filter) => {
   }
   const maxBuy = effectiveMaxBuy(filter);
   const criteria = buildCriteria(filter, { maxBuy });
-  const result = await market.searchMarket(criteria, 1);
+  const result = await market.searchMarket(criteria, 1, token);
   if (!result.ok) {
     return { ok: false, message: `Search rejected: ${result.error.label} (${result.error.code})` };
   }
@@ -1519,6 +1511,7 @@ export const previewSearch = async (filter) => {
         name: market.nameOf(item),
         rating: market.ratingOf(item),
         definitionId: Number(item.definitionId) || 0,
+        target: targetIdentity(item),
         bin: toInt(auction.buyNowPrice),
         bid: toInt(auction.currentBid) || toInt(auction.startingBid),
         expires: Number(auction.expires) || 0,
@@ -1528,4 +1521,13 @@ export const previewSearch = async (filter) => {
     })
     .sort((a, b) => a.bin - b.bin);
   return { ok: true, rows, latency: result.latency, maxBuy, futbinPrice: key ? currentPrice(key, BUY_PRICE_MAX_AGE) : 0 };
+};
+
+export const previewSearch = async (filter) => {
+  if (run) return { ok: false, message: "Stop the bot before running a test search." };
+  const task = beginTask("Test search");
+  if (!task) return { ok: false, message: "Another task is in progress. Wait for it or stop it first." };
+  setRequestToken(task.token);
+  try { return await runPreviewSearch(filter, task.token); }
+  finally { endTask(task); setRequestToken(null); }
 };
