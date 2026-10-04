@@ -2,6 +2,7 @@ import { observe } from "./async";
 import { classify } from "./errors";
 import { itemService, pageGlobal, pile, repositories, services, toPageArray } from "./page";
 import { bumpStat } from "./state";
+import { enqueueEa } from "./requestQueue";
 
 // Wrappers around services.Item (FC 27): each call returns a Promise
 // { ok, response, error } and counts requests sent to EA.
@@ -17,7 +18,7 @@ const requireItemService = () => {
   return svc;
 };
 
-const call = async (label, factory, timeoutMs = 15000) => {
+const call = (label, factory, timeoutMs = 15000, token) => enqueueEa(async () => {
   let observable;
   try {
     observable = factory();
@@ -28,7 +29,7 @@ const call = async (label, factory, timeoutMs = 15000) => {
   const response = await observe(observable, timeoutMs);
   const ok = !!(response && response.success);
   return { ok, response, error: ok ? null : classify(response) };
-};
+}, token, label === "purchase");
 
 export const auctionOf = (item) => {
   if (!item) {
@@ -94,7 +95,7 @@ export const marketPageSize = () => {
 
 // Market search. Clear EA's client cache every time,
 // otherwise services.Item returns the previous page without querying the server.
-export const searchMarket = async (criteria, page = 1) => {
+export const searchMarket = async (criteria, page = 1, token) => {
   const svc = requireItemService();
   try {
     if (typeof svc.clearTransferMarketCache === "function") {
@@ -102,7 +103,10 @@ export const searchMarket = async (criteria, page = 1) => {
     }
   } catch (e) {}
   const started = now();
-  const result = await call("search", () => svc.searchTransferMarket(criteria, page));
+  const result = await call("search", () => {
+    if (typeof svc.clearTransferMarketCache === "function") svc.clearTransferMarketCache();
+    return svc.searchTransferMarket(criteria, page);
+  }, 15000, token);
   const latency = now() - started;
   const items =
     (result.response && result.response.data && result.response.data.items) || [];

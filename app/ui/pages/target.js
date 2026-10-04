@@ -1,4 +1,8 @@
 import { previewSearch, isRunning } from "../../core/engine";
+import { cancelTask, currentTask } from "../../core/tasks";
+import { availableGroups, GROUP_LABELS, categoryChoices, providerEntries, switchGroupPatch } from "../../core/itemTargets";
+import { currentItemQuote, itemQuoteRecord, onItemQuote, requestItemQuote } from "../../prices/nonPlayerQuotes";
+import { pageGlobal } from "../../core/page";
 import {
   addFilter,
   describeFilter,
@@ -21,7 +25,7 @@ import { afterTax, floorPrice, formatCoins, profitFor, roundPrice, toInt } from 
 import { getSettings } from "../../core/settings";
 import { currentPrice, getPriceRecord, onPriceUpdate, requestPrice, trackPrice } from "../../prices/priceService";
 import { loadEaPlayersCatalog, searchEaPlayersByTerm } from "../../services/datasource/eaPlayers";
-import { debounce, escapeHtml, qs, setHtml } from "../dom";
+import { debounce, escapeHtml, qs, qsa, setHtml } from "../dom";
 import {
   grid,
   numberField,
@@ -68,6 +72,7 @@ let unsubscribeFilters = null;
 let unsubscribePrices = null;
 let liveTrack = { key: 0, untrack: null };
 let liveTimer = null;
+let unsubscribeItemQuotes = null;
 
 const LIVE_MAX_AGE = 5 * 60 * 1000;
 
@@ -93,6 +98,14 @@ const futbinLiveHtml = () => {
   const filter = getActiveFilter();
   if (!filter || filter.priceMode !== "futbin") {
     return "";
+  }
+  if (filter.itemGroup !== "players") {
+    const quote = currentItemQuote(filter);
+    const record = itemQuoteRecord(filter);
+    return quote ? `<div class="mb-note mb-live">${escapeHtml(quote.source)} <b>${formatCoins(quote.price)}</b>
+      · ${escapeHtml(quote.referenceIdentity)} · ${Math.round((Date.now() - quote.fetchedAt) / 1000)} s ago
+      <button type="button" class="mb-link" data-target-action="futbin-refresh">Refresh reference</button></div>` :
+      `<div class="mb-note is-warn">${escapeHtml(record && record.reason || "Select an exact search result. Fetching FUTBIN first, then EA if needed…")}</div>`;
   }
   const key = futbinKeyForFilter(filter);
   if (!key) {
@@ -121,6 +134,7 @@ const futbinLiveHtml = () => {
 // Track the displayed filter's FUTBIN price while the Target tab is open.
 const syncLiveTracking = () => {
   const filter = getActiveFilter();
+  if (filter && filter.itemGroup !== "players" && filter.priceMode === "futbin" && !currentItemQuote(filter)) requestItemQuote(filter);
   const key = filter && filter.priceMode === "futbin" ? futbinKeyForFilter(filter) : 0;
   if (key === liveTrack.key) {
     return;
@@ -160,6 +174,11 @@ const listHtml = () => {
 
 const playerChipHtml = () => {
   const filter = getActiveFilter();
+  if (filter && filter.itemGroup !== "players") {
+    return filter.selectedItem ? `<span class="mb-chip"><span>${escapeHtml(filter.selectedItem.name)} · id ${filter.selectedItem.definitionId}</span>
+      <button type="button" data-player-clear aria-label="Remove selected item">×</button></span>` :
+      `<span class="mb-empty">Search a subtype, then select a result below to target a specific item.</span>`;
+  }
   const player = filter && filter.player;
   if (!player) {
     return `<span class="mb-empty">No player selected: the filter applies to all players matching the criteria.</span>`;
@@ -172,7 +191,7 @@ const targetWarningHtml = () => {
   if (!filter || filterHasTarget(filter)) {
     return "";
   }
-  return `<div class="mb-note is-warn" style="margin-top:8px">No player or criteria: the bot skips this filter for safety (otherwise it would buy any player below your max price). Choose a player, quality, rarity, or rating.</div>`;
+  return `<div class="mb-note is-warn" style="margin-top:8px">Choose a specific item, subtype, or restrictive criterion before searching.</div>`;
 };
 
 const lastEaHtml = () => {
@@ -181,8 +200,42 @@ const lastEaHtml = () => {
     return "Run a search in EA's transfer market, then import it here (rarity, position, style, nation…).";
   }
   const when = new Date(snapshot.capturedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  const player = snapshot.player && snapshot.player.name ? snapshot.player.name : snapshot.player ? `player ${snapshot.player.id}` : "all players";
+  const player = snapshot.player && snapshot.player.name ? snapshot.player.name : snapshot.player ? `player ${snapshot.player.id}` : `${snapshot.itemGroup || "players"} · ${snapshot.category}`;
   return `Last EA search captured at ${when} : ${escapeHtml(player)}${snapshot.maxBuy ? ` · max buy ${formatCoins(snapshot.maxBuy)}` : ""}.`;
+};
+
+const categoryFieldsHtml = () => {
+  const f = getActiveFilter();
+  if (!f || f.itemGroup === "players") return "";
+  const options = (method, ...args) => providerEntries(method, ...args).map((v) => [v.value, v.label]);
+  const colorOptions = () => providerEntries("getVanityColorDP").map((v) => [v.id, v.label]);
+  const fields = [];
+  const choices = categoryChoices(f.itemGroup);
+  const category = pageGlobal("SearchCategory") || {};
+  fields.push(selectField({ bind: "f:categoryChoice", label: "Subtype", wide: true, options: choices.map((v) => [v.category, v.label]) }));
+  const add = (bind, label, opts) => { if (opts.length) fields.push(selectField({ bind, label, options: opts })); };
+  if (f.itemGroup === "managers" || f.itemGroup === "club") {
+    add("f:levelChoice", "Quality", options("getItemLevelDP"));
+    const type = (pageGlobal("ItemType") || {}).MANAGER;
+    const choice = choices.find((v) => String(v.category) === String(f.category));
+    add("f:rarityChoice", "Rarity", options("getItemRarityDP", { itemTypes: type != null && f.itemGroup === "managers" ? [type] : [], itemSubTypes: choice ? [choice.subtype] : [], quality: f.level, tradableOnly: true }));
+  }
+  if (f.itemGroup === "managers") add("f:nationChoice", "Nation", options("getNationDP"));
+  if (f.itemGroup === "managers" || f.category === category.MANAGER_LEAGUE || f.itemGroup === "club" && f.category !== category.BALL) add("f:leagueChoice", "League", options("getLeagueDP", true));
+  if (f.itemGroup === "club") {
+    if ([category.KIT, category.BADGE, category.STADIUM].includes(f.category)) {
+      add("f:clubChoice", "Club", options("getTeamDP", f.league));
+      add("f:authenticity", "Authenticity", options("getVanityAuthenticityDP"));
+    }
+    if ([category.KIT, category.BADGE, category.BALL].includes(f.category)) {
+      add("f:primaryColorChoice", "Primary color", colorOptions());
+      if (f.category !== category.BALL) add("f:secondaryColorChoice", "Secondary color", colorOptions());
+    }
+  }
+  if (f.category === category.PLAYSTYLE) add("f:playStyleChoice", "Chemistry style", options("getPlayStyleDP"));
+  fields.push(`<div class="mb-field is-wide" data-player-chip>${playerChipHtml()}</div>
+    <p class="mb-hint is-wide">Broad filters use fixed buy and sell prices. For automatic pricing, select a Test search result. Manager FUTBIN references group country and quality; league and rarity modifiers use EA.</p>`);
+  return grid(...fields);
 };
 
 export const targetPageHtml = () => `
@@ -204,7 +257,8 @@ export const targetPageHtml = () => `
     "Target",
     grid(
       textField({ bind: "f:name", label: "Filter name", wide: true }),
-      `<div class="mb-field is-wide">
+      selectField({ bind: "f:itemGroupChoice", label: "Item group", wide: true, options: availableGroups().map((v) => [v, GROUP_LABELS[v]]) }),
+      `<div class="mb-field is-wide" data-show-if="f:itemGroup=players">
         <label class="mb-label" for="mb-player-input"><span>Player</span><em data-catalog-status></em></label>
         <div class="mb-player-search">
           <input id="mb-player-input" class="mb-input" type="search" autocomplete="off" spellcheck="false" placeholder="Player name (e.g. Mbappé)" data-player-input aria-autocomplete="list" aria-controls="mb-player-results" />
@@ -214,10 +268,11 @@ export const targetPageHtml = () => `
         <div data-target-warning>${targetWarningHtml()}</div>
         <p class="mb-hint">All versions of the player are searched. For a specific card (TOTW, promo…), enter its version ID or filter by rating / rarity.</p>
       </div>`,
-      selectField({ bind: "f:level", label: "Quality", options: LEVELS }),
-      selectField({ bind: "f:positionChoice", label: "Position", options: POSITIONS }),
-      numberField({ bind: "f:minRating", label: "Min rating", placeholder: "—", max: 99 }),
-      numberField({ bind: "f:maxRating", label: "Max rating", placeholder: "—", max: 99 })
+      selectField({ bind: "f:level", label: "Quality", options: LEVELS, showIf: "f:itemGroup=players" }),
+      selectField({ bind: "f:positionChoice", label: "Position", options: POSITIONS, showIf: "f:itemGroup=players" }),
+      numberField({ bind: "f:minRating", label: "Min rating", placeholder: "—", max: 99, showIf: "f:itemGroup=players" }),
+      numberField({ bind: "f:maxRating", label: "Max rating", placeholder: "—", max: 99, showIf: "f:itemGroup=players" }),
+      `<div class="mb-field is-wide" data-category-fields>${categoryFieldsHtml()}</div>`
     )
   )}
   ${section(
@@ -229,25 +284,25 @@ export const targetPageHtml = () => `
         wide: true,
         options: [
           ["fixed", "Fixed price"],
-          ["futbin", "% of FUTBIN price (tracked live)"],
+          ["futbin", "% of reference (FUTBIN first, EA fallback for items)"],
         ],
       }),
       numberField({
         bind: "f:futbinPercent",
-        label: "% of FUTBIN price",
+        label: "Buy reference %",
         float: true,
         min: 10,
         max: 150,
         key: true,
         showIf: "f:priceMode=futbin",
-        hint: "e.g. 90 = buy up to 90% of the FUTBIN price. Refreshed every 60–120 seconds while the bot runs.",
+        hint: "Non-player default: 80%. Rounded down to an EA price tier. Automatic pricing requires a specific item.",
       }),
       priceField({
         bind: "f:maxBuy",
         label: "Max buy price (Buy Now)",
         key: true,
         wide: true,
-        hint: "Fixed mode: buy any card at this price or less. FUTBIN mode: optional absolute cap (empty = none).",
+        hint: "Fixed mode: ceiling for matching items. Automatic mode: optional absolute cap.",
       }),
       `<div class="mb-field is-wide" data-show-if="f:priceMode=futbin"><div data-futbin-live>${futbinLiveHtml()}</div></div>`,
       priceField({ bind: "f:maxBid", label: "Max bid", hint: "Used only when bidding is enabled (Buy tab)." }),
@@ -264,19 +319,19 @@ export const targetPageHtml = () => `
         options: [
           ["global", "Use Sell tab setting"],
           ["fixed", "Fixed price for this filter"],
-          ["futbin", "% of FUTBIN price for this filter"],
+          ["futbin", "% of reference for this filter"],
         ],
       }),
       priceField({ bind: "f:sellPrice", label: "Sell price", wide: true, showIf: "f:sellMode=fixed" }),
       rangeField({
         bind: "f:sellPercent",
-        label: "% of FUTBIN price",
+        label: "Sell reference %",
         unit: null,
         optional: true,
         wide: true,
         placeholder: "e.g. 98-100 (empty = Sell tab)",
         showIf: "f:sellMode=futbin",
-        hint: "The purchased version's FUTBIN price, refreshed immediately after buying.",
+        hint: "Non-player default: 95%. References older than one minute are refreshed before listing.",
       })
     )
   )}
@@ -284,11 +339,11 @@ export const targetPageHtml = () => `
     "Advanced criteria (EA IDs)",
     grid(
       numberField({ bind: "f:definitionId", label: "Exact version ID", placeholder: "e.g. 50565123" }),
-      textField({ bind: "f:raritiesText", label: "Rarity IDs", placeholder: "e.g. 3" }),
-      numberField({ bind: "f:nationField", label: "Nation (ID)", placeholder: "—" }),
-      numberField({ bind: "f:leagueField", label: "League (ID)", placeholder: "—" }),
-      numberField({ bind: "f:clubField", label: "Club (ID)", placeholder: "—" }),
-      numberField({ bind: "f:playStyleField", label: "Play style (ID)", placeholder: "—" })
+      textField({ bind: "f:raritiesText", label: "Rarity IDs", placeholder: "e.g. 3", showIf: "f:itemGroup=players" }),
+      numberField({ bind: "f:nationField", label: "Nation (ID)", placeholder: "—", showIf: "f:itemGroup=players" }),
+      numberField({ bind: "f:leagueField", label: "League (ID)", placeholder: "—", showIf: "f:itemGroup=players" }),
+      numberField({ bind: "f:clubField", label: "Club (ID)", placeholder: "—", showIf: "f:itemGroup=players" }),
+      numberField({ bind: "f:playStyleField", label: "Play style (ID)", placeholder: "—", showIf: "f:itemGroup=players" })
     ) +
       `<p class="mb-hint">Set up your search in the EA market, then click “Import”.</p>`
   )}
@@ -298,6 +353,7 @@ export const targetPageHtml = () => `
      <div class="mb-row" style="margin-top:8px">
        <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-target-action="import">Import EA search</button>
        <button type="button" class="mb-btn mb-btn-primary mb-btn-sm" data-target-action="preview">Test search (without buying)</button>
+       <button type="button" class="mb-btn mb-btn-danger mb-btn-sm" data-target-action="stop-preview" hidden>Stop test</button>
      </div>
      <div data-preview></div>`
   )}
@@ -305,6 +361,14 @@ export const targetPageHtml = () => `
 
 // Virtual fields: convert to the filter model.
 const VIRTUAL = {
+  itemGroupChoice: { read: (f) => f.itemGroup, write: (v) => switchGroupPatch(v) },
+  categoryChoice: { read: (f) => f.category, write: (v, f) => {
+    const choice = categoryChoices(f.itemGroup).find((c) => String(c.category) === String(v));
+    return choice ? Object.assign({}, switchGroupPatch(f.itemGroup), { type: choice.type, category: choice.category,
+      futbinPercent: f.futbinPercent, sellPercent: f.sellPercent }) : {};
+  } },
+  rarityChoice: { read: (f) => f.rarities[0] == null ? -1 : f.rarities[0], write: (v) => ({ rarities: Number(v) >= 0 ? [Number(v)] : [] }) },
+  levelChoice: { read: (f) => f.level, write: (v) => ({ level: v, rarities: [] }) },
   positionChoice: {
     read: (filter) => (filter.zone > 0 ? String(filter.zone) : filter.position || "any"),
     write: (value) =>
@@ -324,6 +388,9 @@ const VIRTUAL = {
   clubField: { read: (f) => (f.club > 0 ? f.club : 0), write: (v) => ({ club: toInt(v) || -1 }) },
   playStyleField: { read: (f) => (f.playStyle > 0 ? f.playStyle : 0), write: (v) => ({ playStyle: toInt(v) || -1 }) },
 };
+["nation", "league", "club", "playStyle", "primaryColor", "secondaryColor"].forEach((key) => {
+  VIRTUAL[`${key}Choice`] = { read: (f) => f[key], write: (v) => Object.assign({ [key]: Number(v) }, key === "league" ? { club: -1 } : {}) };
+});
 
 registerVirtualFilterFields(VIRTUAL);
 
@@ -336,12 +403,12 @@ const previewHtml = (result) => {
   }
   const rows = result.rows
     .slice(0, 21)
-    .map((row) => {
+    .map((row, index) => {
       const deal = result.maxBuy && row.bin && row.bin <= result.maxBuy && row.match && !row.own;
       const minutes = Math.floor(row.expires / 60);
       const time = row.expires >= 3600 ? `${Math.floor(row.expires / 3600)} h` : `${minutes} min`;
       return `<tr class="${deal ? "is-deal" : row.match ? "" : "is-muted"}">
-        <td>${escapeHtml(row.name)} ${row.rating}${row.own ? " (you)" : ""}</td>
+        <td><button type="button" class="mb-link" data-exact-result="${index}">${escapeHtml(row.name)}${row.rating ? ` ${row.rating}` : ""}</button>${row.own ? " (you)" : ""}</td>
         <td class="is-num">${row.bin ? formatCoins(row.bin) : "—"}</td>
         <td class="is-num">${row.bid ? formatCoins(row.bid) : "—"}</td>
         <td class="is-num">${time}</td>
@@ -369,13 +436,23 @@ export const bindTargetPage = (page, refreshAll) => {
   const preview = qs(page, "[data-preview]");
   let hits = [];
   let focusIndex = -1;
+  let previewRows = [];
+  let previewGeneration = 0;
+  let previewFilterKey = "";
+  let categorySignature = "";
 
   const warningEl = qs(page, "[data-target-warning]");
   const liveEl = qs(page, "[data-futbin-live]");
   const renderLive = () => setHtml(liveEl, futbinLiveHtml());
   const renderList = () => {
+    const filter = getActiveFilter();
+    const signature = filter ? `${filter.itemGroup}:${filter.category}:${filter.league}:${filter.level}` : "";
+    if (signature !== categorySignature) {
+      categorySignature = signature;
+      setHtml(qs(page, "[data-category-fields]"), categoryFieldsHtml());
+    }
     setHtml(listEl, listHtml());
-    setHtml(chipEl, playerChipHtml());
+    qsa(page, "[data-player-chip]").forEach((el) => setHtml(el, playerChipHtml()));
     setHtml(warningEl, targetWarningHtml());
     setHtml(lastEa, lastEaHtml());
     syncLiveTracking();
@@ -386,6 +463,12 @@ export const bindTargetPage = (page, refreshAll) => {
     unsubscribeFilters();
   }
   unsubscribeFilters = onFiltersChange(() => {
+    previewGeneration += 1;
+    previewRows = [];
+    previewFilterKey = "";
+    // Preview writes use innerHTML; always clear rather than trusting setHtml's cache.
+    preview.innerHTML = "";
+    if (currentTask() && currentTask().label === "Test search") cancelTask();
     renderList();
     refreshAll();
   });
@@ -398,6 +481,8 @@ export const bindTargetPage = (page, refreshAll) => {
       refreshAll();
     }
   });
+  if (unsubscribeItemQuotes) unsubscribeItemQuotes();
+  unsubscribeItemQuotes = onItemQuote(() => { renderLive(); refreshAll(); });
   syncLiveTracking();
   clearInterval(liveTimer);
   liveTimer = setInterval(renderLive, 15000);
@@ -485,6 +570,16 @@ export const bindTargetPage = (page, refreshAll) => {
 
   page.addEventListener("click", async (event) => {
     const target = event.target;
+    const exact = target.closest("[data-exact-result]");
+    if (exact) {
+      const row = previewRows[Number(exact.dataset.exactResult)];
+      const filter = getActiveFilter();
+      if (row && row.match && filter && previewFilterKey === JSON.stringify(filter) && row.target.group === filter.itemGroup) {
+        updateFilter(filter.id, { definitionId: row.definitionId, selectedItem: filter.itemGroup === "players" ? null : row.target,
+          player: null, name: isDefaultName(filter.name) ? row.name : filter.name });
+      }
+      return;
+    }
     const toggle = target.closest("[data-filter-toggle]");
     if (toggle) {
       event.stopPropagation();
@@ -503,7 +598,7 @@ export const bindTargetPage = (page, refreshAll) => {
     if (target.closest("[data-player-clear]")) {
       const filter = getActiveFilter();
       if (filter) {
-        updateFilter(filter.id, { player: null });
+        updateFilter(filter.id, { player: null, selectedItem: null, definitionId: 0 });
       }
       return;
     }
@@ -526,8 +621,13 @@ export const bindTargetPage = (page, refreshAll) => {
     if (!targetAction) {
       return;
     }
+    if (targetAction.dataset.targetAction === "stop-preview") {
+      if (currentTask() && currentTask().label === "Test search") cancelTask();
+      return;
+    }
     if (targetAction.dataset.targetAction === "futbin-refresh") {
       const filter = getActiveFilter();
+      if (filter && filter.itemGroup !== "players") { requestItemQuote(filter, { force: true }).then(renderLive); return; }
       const key = filter ? futbinKeyForFilter(filter) : 0;
       if (key) {
         requestPrice(key, { name: filter.player ? filter.player.name : "", rating: filter.player ? filter.player.rating : 0 }).then(renderLive);
@@ -550,15 +650,25 @@ export const bindTargetPage = (page, refreshAll) => {
         return;
       }
       targetAction.disabled = true;
+      const generation = ++previewGeneration;
+      const filter = getActiveFilter();
+      const filterKey = JSON.stringify(filter);
+      previewRows = [];
+      previewFilterKey = "";
+      const stop = qs(page, '[data-target-action="stop-preview"]');
+      stop.hidden = false;
       preview.innerHTML = `<div class="mb-note" style="margin-top:8px">Searching…</div>`;
       try {
-        const filter = getActiveFilter();
         const result = await previewSearch(filter);
+        if (generation !== previewGeneration || filterKey !== JSON.stringify(getActiveFilter())) return;
+        previewRows = result.rows || [];
+        previewFilterKey = filterKey;
         preview.innerHTML = previewHtml(result);
       } catch (e) {
-        preview.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">${escapeHtml(e.message || e)}</div>`;
+        if (generation === previewGeneration) preview.innerHTML = `<div class="mb-note is-warn" style="margin-top:8px">${escapeHtml(e.message || e)}</div>`;
       } finally {
         targetAction.disabled = false;
+        stop.hidden = true;
       }
     }
   });
@@ -577,6 +687,11 @@ export const importSnapshot = (snapshot, { asNew = false } = {}) => {
     return null;
   }
   const patch = {
+    itemGroup: snapshot.itemGroup,
+    selectedItem: snapshot.selectedItem || null,
+    authenticity: snapshot.authenticity || "any",
+    primaryColor: snapshot.primaryColor,
+    secondaryColor: snapshot.secondaryColor,
     type: snapshot.type,
     category: snapshot.category,
     level: snapshot.level,
@@ -619,7 +734,8 @@ const effectiveBuy = (filter) => {
     return toInt(filter.maxBuy);
   }
   const key = futbinKeyForFilter(filter);
-  const price = key ? currentPrice(key, LIVE_MAX_AGE, "buy") : 0;
+  const quote = filter.itemGroup !== "players" ? currentItemQuote(filter) : null;
+  const price = quote ? quote.price : key ? currentPrice(key, LIVE_MAX_AGE, "buy") : 0;
   if (!price) {
     return 0;
   }
@@ -639,7 +755,8 @@ export const sellExtra = () => {
   const futbinSell = filter.sellMode === "futbin" || (filter.sellMode === "global" && settings.priceMode === "futbin");
   if (futbinSell) {
     const key = futbinKeyForFilter(filter);
-    const price = key ? currentPrice(key, LIVE_MAX_AGE, "sell") : 0;
+    const quote = filter.itemGroup !== "players" ? currentItemQuote(filter, 60000) : null;
+    const price = quote ? quote.price : key ? currentPrice(key, LIVE_MAX_AGE, "sell") : 0;
     if (!price) {
       return "";
     }

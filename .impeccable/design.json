@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-04T03:41:29Z",
+  "title": "Design System: MagicBuyer",
+  "extensions": {
+    "colorMeta": {
+      "mb-accent": {
+        "role": "primary",
+        "displayName": "Mint accent"
+      },
+      "mb-bg": {
+        "role": "neutral",
+        "displayName": "Panel navy"
+      }
+    },
+    "shadows": [
+      {
+        "name": "panel",
+        "value": "-24px 0 60px rgba(0,0,0,0.5)",
+        "purpose": "Right-edge panel overlay"
+      },
+      {
+        "name": "autocomplete",
+        "value": "0 16px 36px rgba(0,0,0,0.5)",
+        "purpose": "Search result overlay"
+      }
+    ],
+    "motion": [
+      {
+        "name": "panel-transition",
+        "value": "0.22s ease",
+        "purpose": "Existing horizontal panel transition"
+      },
+      {
+        "name": "switch-transition",
+        "value": "0.15s",
+        "purpose": "Existing switch transition"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "viewport-panel",
+        "value": "720px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary panel action; visual example only.",
+      "html": "<button class=\"ds-button ds-primary\">Preview matching items</button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:8px 12px;border:0;border-radius:10px;font:700 13px -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;white-space:nowrap;cursor:pointer}.ds-button:hover{filter:brightness(1.12)}.ds-button:focus-visible{outline:2px solid var(--mb-accent-2,#3fd9e8);outline-offset:2px}.ds-button:disabled{opacity:.45;cursor:not-allowed}.ds-primary{background:linear-gradient(135deg,var(--mb-accent,#6ff5cf),var(--mb-accent-2,#3fd9e8));color:#041319}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary panel action.",
+      "html": "<button class=\"ds-button ds-ghost\">Import EA search</button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:8px 12px;border:0;border-radius:10px;font:700 13px -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;white-space:nowrap;cursor:pointer}.ds-button:hover{filter:brightness(1.12)}.ds-button:focus-visible{outline:2px solid var(--mb-accent-2,#3fd9e8);outline-offset:2px}.ds-button:disabled{opacity:.45;cursor:not-allowed}.ds-ghost{background:var(--mb-card-2,rgba(255,255,255,.075));color:var(--mb-text,#e9eef6)}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Stop or destructive panel action.",
+      "html": "<button class=\"ds-button ds-danger\">Stop test</button>",
+      "css": ".ds-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:8px 12px;border:0;border-radius:10px;font:700 13px -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;white-space:nowrap;cursor:pointer}.ds-button:hover{filter:brightness(1.12)}.ds-button:focus-visible{outline:2px solid var(--mb-accent-2,#3fd9e8);outline-offset:2px}.ds-button:disabled{opacity:.45;cursor:not-allowed}.ds-danger{background:rgba(255,93,108,.14);color:#ff8e99}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Inset navy value field.",
+      "html": "<input class=\"ds-input\" aria-label=\"Exact version ID\" value=\"9001\">",
+      "css": ".ds-input{display:block;width:100%;height:34px;padding:0 10px;border-radius:9px;border:1px solid rgba(63,217,232,.3);background:#0a111b;color:var(--mb-accent,#6ff5cf);font:600 13.5px -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif}.ds-input:focus{border-color:var(--mb-accent,#6ff5cf)}.ds-input:focus-visible{outline:2px solid var(--mb-accent-2,#3fd9e8);outline-offset:2px}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Horizontally scrollable panel tab strip.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Example panel tabs\"><button class=\"ds-tab ds-active\">Target</button><button class=\"ds-tab\">Transfers</button></nav>",
+      "css": ".ds-nav{display:flex;gap:6px;overflow-x:auto}.ds-tab{flex:0 0 auto;padding:7px 11px;border:0;border-radius:9px;font:650 12.5px -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;color:var(--mb-muted,rgba(233,238,246,.6));background:transparent}.ds-tab:hover{color:var(--mb-text,#e9eef6);background:var(--mb-card,rgba(255,255,255,.045))}.ds-tab.ds-active{color:var(--mb-accent,#6ff5cf);background:rgba(111,245,207,.12)}.ds-tab:focus-visible{outline:2px solid var(--mb-accent-2,#3fd9e8);outline-offset:2px}"
+    },
+    {
+      "name": "Selected Item Chip",
+      "kind": "chip",
+      "refersTo": "selected-chip",
+      "description": "Selected item identity with remove affordance; synthetic identity.",
+      "html": "<span class=\"ds-chip\"><span>Sample manager · id 9001</span><button aria-label=\"Remove selected item\">×</button></span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:6px 8px 6px 10px;border-radius:999px;background:rgba(111,245,207,.12);border:1px solid rgba(111,245,207,.3);color:var(--mb-text,#e9eef6);font:650 12.5px -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif}.ds-chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-chip button{width:20px;height:20px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:var(--mb-text,#e9eef6);font-size:12px;padding:0}.ds-chip button:focus-visible{outline:2px solid var(--mb-accent-2,#3fd9e8);outline-offset:2px}"
+    },
+    {
+      "name": "Field Card",
+      "kind": "card",
+      "refersTo": "field-card",
+      "description": "Translucent grouping surface without card shadow.",
+      "html": "<div class=\"ds-field\">Subtype</div>",
+      "css": ".ds-field{min-width:0;padding:9px 10px;border-radius:var(--mb-radius,12px);background:var(--mb-card,rgba(255,255,255,.045));border:1px solid var(--mb-line,rgba(255,255,255,.08));color:var(--mb-text,#e9eef6);font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "MagicBuyer control panel",
+    "overview": "This is a descriptive record of the implemented panel, rather than a newly chosen brand metaphor. Preserve its navy surfaces, mint controls, compact grouped fields, and visible operating status. The established right-edge panel provides the visual authority for extensions.\n\nThe interface concentrates controls into bordered translucent cards. Bright accents identify actions, selected targets, and prices; softer text supports labels and explanations. The header, operating controls, metrics, tabs, scrolling content, and log remain distinct parts of one panel.",
+    "keyCharacteristics": [
+      "Navy surfaces with mint and cyan interaction accents.",
+      "Compact system typography with stronger labels and numeric values.",
+      "Rounded translucent field cards and pill-shaped selections.",
+      "Persistent operating status and a separately scrolling log."
+    ],
+    "rules": [
+      {
+        "name": "The Semantic Status Rule",
+        "body": "Preserve the implemented success, warning, error, and information color roles alongside readable state text.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do preserve the incumbent navy/mint panel and its compact grouped controls.",
+      "Do reuse field cards, labels, hints, chips, notes, and action variants for extensions.",
+      "Do retain readable status and reference-source text alongside color.",
+      "Do contain category controls and wrapping preview content inside the panel.",
+      "Do preserve keyboard-focus outlines and accessible control labels."
+    ],
+    "donts": [
+      "Don't replace the established visual identity while extending the panel.",
+      "Don't turn every field card into a raised shadowed surface.",
+      "Don't add display typography or a hero composition to the compact panel.",
+      "Don't present synthetic fixture observations as proof of live EA data or trading behavior."
+    ]
+  }
+}

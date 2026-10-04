@@ -549,6 +549,13 @@ export const STYLES = `
 #mb-root .mb-preview td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
 #mb-root .mb-preview tr.is-deal td { color: var(--mb-ok); font-weight: 700; }
 #mb-root .mb-preview tr.is-muted td { color: var(--mb-muted); }
+#mb-root .mb-preview button.mb-link { min-height: 44px; text-align: left; white-space: normal; max-width: 14rem; }
+#mb-root [data-category-fields] .mb-grid { min-width: 0; }
+#mb-root .mb-grid > [data-category-fields] { padding: 0; background: none; border: 0; }
+#mb-root [data-category-fields] .mb-input { min-height: 44px; }
+#mb-root [data-category-fields] select { min-width: 0; max-width: 100%; }
+#mb-root [data-category-fields] .mb-hint.is-wide { grid-column: 1 / -1; }
+#mb-root [data-transfer-futbin] td { white-space: normal; overflow-wrap: anywhere; }
 #mb-root .mb-stats-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

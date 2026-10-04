@@ -2,8 +2,8 @@ module.exports = {
   headers: {
     name: "MagicBuyer-UT",
     namespace: "http://tampermonkey.net/",
-    version: "5.1.3",
-    description: "Sniper / autobuyer for the EA FC 27 Ultimate Team web app",
+    version: "5.2.0",
+    description: "Search, buy, bid and list players, managers, club items and consumables in EA FC 27",
     author: "AMINE1921",
     match: [
       "https://www.ea.com/*/ea-sports-fc/ultimate-team/web-app*",
