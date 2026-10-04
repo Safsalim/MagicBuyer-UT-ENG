@@ -27,6 +27,7 @@ releases, so their automatic update check cannot discover this fork's corrected 
 1. Click the **MagicBuyer** tab (EA navigation bar) or the **MB** badge in the bottom-right corner.
 2. In the **Target** tab, choose **Item group**. For players, search by name. For managers,
    club items and consumables, choose a subtype and native criteria, then select an exact **Test search** result.
+   Chemistry styles can fetch a reference directly when you choose a specific style such as Hunter.
 3. Enter the **Max buy price** (Buy Now) and, if you want to resell, the **Sell price**
    (the panel shows the net proceeds after EA's 5% tax and the profit per card).
 4. Click **Test search (without buying)** to see the market results (green shows what the bot would buy).
@@ -38,7 +39,7 @@ and click **⚡ Snipe this search** to create a filter with exactly those criter
 ## Non-player trading (5.2.0)
 
 Managers, club items and consumables use EA's runtime categories and data providers; unavailable
-categories or criteria are hidden. Exact targets support automatic reference prices; broad filters
+categories or criteria are hidden. Exact targets and specific chemistry styles support automatic reference prices; broad filters
 require fixed buy and sell prices. New non-player filters default to **80% buy** and **95% sell**,
 both editable. Player defaults and player-only rules remain unchanged.
 
@@ -157,6 +158,13 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 ```
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
+
+## What's new in 5.2.2
+
+- Selecting a specific chemistry style, such as Hunter, now fetches its reference price directly in
+  percentage mode, with FUTBIN first and EA fallback. Selecting a Test search result is optional.
+- Switching styles clears an old exact selection and uses a separate price reference. The Target
+  tab shows the calculated buy ceiling and allows unavailable references to be refreshed.
 
 ## What's new in 5.2.1
 

@@ -1,7 +1,7 @@
 import { sleep, withTimeout } from "./async";
 import { KIND, isFatal } from "./errors";
 import { durationSeconds, futbinSellPrice, prepareListing, sellModeFor, sellPercentFor, fixedSellPriceFor } from "./listing";
-import { hasExactTarget, matchesItem, targetIdentity } from "./itemTargets";
+import { hasReferenceTarget, matchesItem, targetIdentity } from "./itemTargets";
 import { normalizeFilter, filterHasTarget } from "./filters";
 import { requestItemQuote } from "../prices/nonPlayerQuotes";
 import { log } from "./logger";
@@ -55,7 +55,7 @@ export const matchingListable = (item, filter, includeExpired = true) => {
 
 export const matchingListingPrice = async (item, filter, sell, token) => {
   if (sellModeFor(filter, sell) === "fixed") return { price: fixedSellPriceFor(filter, sell), source: "Fixed price", fetchedAt: Date.now() };
-  if (!hasExactTarget(filter)) return { price: 0, reason: "Broad filters require fixed prices" };
+  if (!hasReferenceTarget(filter)) return { price: 0, reason: "Broad filters require fixed prices" };
   if (filter.itemGroup !== "players") {
     const quoteFilter = normalizeFilter(Object.assign({}, filter, { selectedItem: targetIdentity(item), definitionId: Number(item.definitionId) }));
     const quote = await requestItemQuote(quoteFilter, { token, maxAge: 60000 });

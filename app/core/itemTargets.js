@@ -79,6 +79,18 @@ export const targetIdentity = (item) => {
 export const hasExactTarget = (filter) => !!(filter && (filter.definitionId || (filter.selectedItem && filter.selectedItem.definitionId) ||
   (filter.itemGroup === "players" && filter.player && filter.player.id)));
 
+// A native chemistry-style choice identifies the consumable without a market result.
+export const chemistryStyleTarget = (filter) => {
+  const c = pageGlobal("SearchCategory") || {};
+  if (!filter || filter.itemGroup !== "consumables" || !eq(filter.category, c.PLAYSTYLE) ||
+    !categoryChoices("consumables").some((v) => eq(v.category, filter.category) && eq(v.type, filter.type))) return null;
+  const selected = filter.selectedItem;
+  const subtype = filter.playStyle > 0 ? filter.playStyle : selected && selected.subtype;
+  if (!(subtype > 0) || selected && !eq(selected.subtype, subtype)) return null;
+  return providerEntries("getPlayStyleDP").find((v) => eq(v.id, subtype) && eq(v.value, subtype)) || null;
+};
+export const hasReferenceTarget = (filter) => hasExactTarget(filter) || !!chemistryStyleTarget(filter);
+
 // Changing category must never carry an exact item or pricing reference with it.
 export const switchGroupPatch = (group) => {
   const choice = categoryChoices(group)[0];

@@ -2,8 +2,7 @@ import { futbinYear, fetchFutbinText } from "./futbinClient";
 import { pricePlatform } from "./priceService";
 import { parseManagerTable, parseChemistryTable } from "./nonPlayerParse";
 import { discoverEaQuote } from "./eaQuote";
-import { hasExactTarget } from "../core/itemTargets";
-import { pageGlobal } from "../core/page";
+import { hasReferenceTarget, chemistryStyleTarget } from "../core/itemTargets";
 
 const quotes = new Map();
 const inflight = new Map();
@@ -16,15 +15,15 @@ export const currentItemQuote = (filter, maxAge = 5 * 60 * 1000) => {
   const quote = quotes.get(quoteKey(filter));
   return quote && quote.status === "available" && Date.now() - quote.fetchedAt <= maxAge ? quote : null;
 };
-export const itemQuoteRecord = (filter) => quotes.get(quoteKey(filter)) || null;
+export const itemQuoteRecord = (filter) => inflight.has(quoteKey(filter)) ? { status: "pending" } : quotes.get(quoteKey(filter)) || null;
 export const onItemQuote = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 
 const futbinQuote = async (filter, maxAge) => {
   const target = filter.selectedItem;
-  const c = pageGlobal("SearchCategory") || {};
+  const style = chemistryStyleTarget(filter);
   const isManager = filter.itemGroup === "managers" && target && target.nation > 0 && target.level !== "any" &&
     filter.league <= 0 && filter.club <= 0 && !filter.rarities.length && filter.authenticity === "any";
-  const isChemistry = filter.itemGroup === "consumables" && filter.category === c.PLAYSTYLE && target && target.name;
+  const isChemistry = !!style;
   if (!isManager && !isChemistry) return null;
   const edition = futbinYear();
   const platform = pricePlatform();
@@ -38,13 +37,13 @@ const futbinQuote = async (filter, maxAge) => {
     tables.set(url, { html, at: Date.now() });
   }
   const price = isManager ? parseManagerTable(html, { edition, platform, nation: target.nation, level: target.level }) :
-    parseChemistryTable(html, { edition, platform, name: target.name });
+    parseChemistryTable(html, { edition, platform, name: style.label });
   return price ? { status: "available", price, source: isManager ? "FUTBIN country / quality group" : "FUTBIN chemistry style",
-    referenceIdentity: isManager ? `nation:${target.nation}:${target.level}` : `style:${target.name}`, fetchedAt: tables.get(url).at, url } : null;
+    referenceIdentity: isManager ? `nation:${target.nation}:${target.level}` : `style:${style.label}`, fetchedAt: tables.get(url).at, url } : null;
 };
 
 export const requestItemQuote = (filter, { token, maxAge = 5 * 60 * 1000, force = false } = {}) => {
-  if (!filter || filter.itemGroup === "players" || !hasExactTarget(filter)) return Promise.resolve({ status: "unavailable", price: 0, reason: "select a specific item" });
+  if (!filter || filter.itemGroup === "players" || !hasReferenceTarget(filter)) return Promise.resolve({ status: "unavailable", price: 0, reason: "select a specific chemistry style or search result" });
   const key = quoteKey(filter);
   const cached = currentItemQuote(filter, maxAge);
   if (!force && cached) return Promise.resolve(cached);
@@ -61,10 +60,19 @@ export const requestItemQuote = (filter, { token, maxAge = 5 * 60 * 1000, force 
     quote = Object.assign({ fetchedAt: Date.now(), edition: futbinYear(), platform: pricePlatform(), targetIdentity: key }, quote);
     if (!token || !token.cancelled) {
       quotes.set(key, quote);
-      listeners.forEach((fn) => fn(key, quote));
     }
     return quote;
-  })().catch((e) => ({ status: "unavailable", price: 0, reason: String(e.message || e), fetchedAt: Date.now() })).finally(() => inflight.delete(key));
+  })().catch((e) => {
+    const quote = { status: "unavailable", price: 0, reason: String(e.message || e), fetchedAt: Date.now() };
+    if (!token || !token.cancelled) {
+      quotes.set(key, quote);
+    }
+    return quote;
+  }).finally(() => {
+    inflight.delete(key);
+    const quote = quotes.get(key);
+    if (quote) listeners.forEach((fn) => fn(key, quote));
+  });
   inflight.set(key, promise);
   return promise;
 };

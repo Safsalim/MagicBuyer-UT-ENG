@@ -20,7 +20,11 @@ definition and restrictive criteria; imports without identity metadata use EA fo
 **Stop test** cancels queued discovery/search work. Changing the filter also cancels a running test
 and invalidates its results, including late responses.
 
-Broad targets need fixed buy and sell prices. Exact non-player targets can use percentage pricing:
+Starting with 5.2.2, choosing a specific native chemistry style (for example Hunter) is enough to
+fetch an automatic reference: no Test search result is required. Changing style clears any old
+exact selection and reference. All styles remains broad and requires fixed prices.
+
+Broad targets need fixed buy and sell prices. Exact non-player targets and specific chemistry styles can use percentage pricing:
 the initial buy percentage is 80%, sell is 95%, and both remain editable. A fixed buy price caps the
 percentage ceiling. A missing or stale reference produces no automatic Buy Now ceiling. Explicit
 bidding caps continue to use the existing bid expiry, reserve and active-bid rules.
@@ -30,7 +34,7 @@ bidding caps continue to use the existing bid expiry, reserve and active-bid rul
 | Target | First source | Fallback |
 | --- | --- | --- |
 | Selected manager with country/quality metadata and no league, club or rarity modifier | FUTBIN country/quality group | EA exact target |
-| Selected chemistry style | FUTBIN chemistry-style row | EA exact target |
+| Specific chemistry style chosen in the dropdown or from a result | FUTBIN chemistry-style row | EA matching native style and criteria |
 | Other selected managers, club items and consumables | EA exact target | No guessed price |
 | Broad criterion/subtype | Fixed price | Automatic pricing unavailable |
 
@@ -40,7 +44,7 @@ valuation. The UI displays that source explicitly. The adapters read the public
 [consumable table](https://www.futbin.com/consumables), require the matching edition and console/PC
 column, and reject absent prices. Unsupported markup or access failure falls back to EA.
 
-EA discovery searches only the exact target and its criteria. It finds the lowest native price tier
+EA discovery searches only the exact target or specific native chemistry style and its criteria. It finds the lowest native price tier
 containing at least three distinct matching Buy Now auctions, excluding your own listings and expired
 auctions. It paginates saturated results, sorts locally and requires two complete matching scans at
 that ceiling to agree. The reference is their third-cheapest price. Discovery stops after 20 requests;
@@ -90,13 +94,21 @@ sizes. A signed-in Chrome/Violentmonkey EA session was unavailable in this envir
 search responses, actual quote discovery and extension installation remain unverified; no real
 purchases, bids, listings or relists were performed.
 
+For 5.2.2, the local fixture also exercised choosing Hunter directly in percentage mode, displaying
+its reference and capped buy ceiling, switching to Anchor, and refreshing the reference. Those
+prices came from synthetic FUTBIN HTML through a mocked extension transport. All 32 tests passed,
+including real EA discovery logic against synthetic auctions and percentage resale calculation.
+
 For a read-only check in your signed-in browser:
 
-1. Install the local rebuilt userscript and reload EA. Verify version 5.2.1 and existing player filters.
+1. Install the local rebuilt userscript and reload EA. Verify version 5.2.2 and existing player filters.
 2. Choose each exposed non-player group. Check native subtype options and dependent criteria resets.
 3. Run Test search with a fixed ceiling. Select a matching result and verify its exact ID and group.
 4. Change a criterion during another test; the old results must clear. Test Stop test as well.
-5. For an exact target, inspect the automatic reference source, identity, platform and age. A missing
+5. Choose Consumables → Chemistry styles → Hunter, then percentage mode. Verify a reference and
+   calculated buy ceiling without selecting a Test search result. Switch styles and verify the price
+   changes; All styles must ask for a specific target. For other exact targets, inspect the automatic
+   reference source, identity, platform and age. A missing
    reference must leave the automatic ceiling unavailable. Keep the bot stopped during this check.
 6. Preview matching transfer items and verify source, prices and skipped rows. Do not click the final
    listing action during read-only validation.
