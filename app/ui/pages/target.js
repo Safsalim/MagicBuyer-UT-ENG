@@ -106,7 +106,7 @@ const futbinLiveHtml = () => {
     const max = filter.maxBuy ? Math.min(filter.maxBuy, computed) : computed;
     const eligible = hasReferenceTarget(filter);
     const message = !eligible ? "Choose a specific chemistry style or select a Test search result to fetch a reference." :
-      record && record.reason || "Fetching FUTBIN first, then EA if needed…";
+      record && record.reason || "Fetching external reference from FUTBIN…";
     return quote ? `<div class="mb-note mb-live">${escapeHtml(quote.source)} <b>${formatCoins(quote.price)}</b>
       · ${escapeHtml(quote.referenceIdentity)} · ${Math.round((Date.now() - quote.fetchedAt) / 1000)} s ago
       → max buy <b>${formatCoins(max)}</b>
@@ -242,7 +242,7 @@ const categoryFieldsHtml = () => {
   }
   if (f.category === category.PLAYSTYLE) add("f:playStyleChoice", "Chemistry style", options("getPlayStyleDP"));
   fields.push(`<div class="mb-field is-wide" data-player-chip>${playerChipHtml()}</div>
-    <p class="mb-hint is-wide">Broad filters use fixed buy and sell prices. For automatic pricing, choose a specific chemistry style or select a Test search result. Manager FUTBIN references group country and quality; league and rarity modifiers use EA.</p>`);
+    <p class="mb-hint is-wide">Automatic references use external prices only. Choose a specific chemistry style or a manager result with country and quality. Broad filters and unsupported items need fixed prices.</p>`);
   return grid(...fields);
 };
 
@@ -292,7 +292,7 @@ export const targetPageHtml = () => `
         wide: true,
         options: [
           ["fixed", "Fixed price"],
-          ["futbin", "% of reference (FUTBIN first, EA fallback for items)"],
+          ["futbin", "% of reference (external prices only)"],
         ],
       }),
       numberField({

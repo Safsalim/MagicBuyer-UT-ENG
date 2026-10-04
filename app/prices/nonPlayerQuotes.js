@@ -1,7 +1,6 @@
 import { futbinYear, fetchFutbinText } from "./futbinClient";
 import { pricePlatform } from "./priceService";
 import { parseManagerTable, parseChemistryTable } from "./nonPlayerParse";
-import { discoverEaQuote } from "./eaQuote";
 import { hasReferenceTarget, chemistryStyleTarget } from "../core/itemTargets";
 
 const quotes = new Map();
@@ -32,14 +31,16 @@ const futbinQuote = async (filter, maxAge) => {
   let html = cache && Date.now() - cache.at <= maxAge ? cache.html : "";
   if (!html) {
     const result = await fetchFutbinText(url);
-    if (!result.ok) return null;
+    if (!result.ok) return { status: "unavailable", price: 0,
+      reason: `FUTBIN ${result.status === 403 ? "denied access (403)" : result.status ? `request failed (${result.status})` : "request failed"}. EA price lookup is disabled. Use fixed prices.` };
     html = result.text;
     tables.set(url, { html, at: Date.now() });
   }
   const price = isManager ? parseManagerTable(html, { edition, platform, nation: target.nation, level: target.level }) :
     parseChemistryTable(html, { edition, platform, name: style.label });
   return price ? { status: "available", price, source: isManager ? "FUTBIN country / quality group" : "FUTBIN chemistry style",
-    referenceIdentity: isManager ? `nation:${target.nation}:${target.level}` : `style:${style.label}`, fetchedAt: tables.get(url).at, url } : null;
+    referenceIdentity: isManager ? `nation:${target.nation}:${target.level}` : `style:${style.label}`, fetchedAt: tables.get(url).at, url } :
+    { status: "unavailable", price: 0, reason: "FUTBIN has no usable price for this item, edition and platform. Use fixed prices." };
 };
 
 export const requestItemQuote = (filter, { token, maxAge = 5 * 60 * 1000, force = false } = {}) => {
@@ -56,7 +57,9 @@ export const requestItemQuote = (filter, { token, maxAge = 5 * 60 * 1000, force 
     let quote = null;
     if (!token || !token.cancelled) quote = await futbinQuote(snapshot, force ? 0 : maxAge);
     if (token && token.cancelled) return { status: "unavailable", price: 0, reason: "cancelled" };
-    if (!quote) quote = await discoverEaQuote(snapshot, { token });
+    // Price lookup never uses the signed-in account's EA market search service.
+    if (!quote) quote = { status: "unavailable", price: 0,
+      reason: "No external reference is supported for this target. EA price lookup is disabled. Use fixed prices." };
     quote = Object.assign({ fetchedAt: Date.now(), edition: futbinYear(), platform: pricePlatform(), targetIdentity: key }, quote);
     if (!token || !token.cancelled) {
       quotes.set(key, quote);
