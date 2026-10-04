@@ -1,5 +1,5 @@
 import { buildCriteria } from "../core/filters";
-import { matchesItem } from "../core/itemTargets";
+import { matchesItem, chemistryStyleTarget } from "../core/itemTargets";
 import * as market from "../core/market";
 import { maxPrice, priceAbove } from "../core/prices";
 
@@ -52,5 +52,8 @@ export const discoverEaQuote = async (filter, { token, search = market.searchMar
   if (!first || !second || !first.complete || !second.complete || signature(first) !== signature(second)) {
     return { status: "unavailable", price: 0, reason: first && first.rows.length < 3 ? "fewer than three listings" : second ? "market changed during discovery" : failure, requests, error };
   }
-  return { status: "available", price: second.rows[2].price, source: "EA third-cheapest BIN", referenceIdentity: `exact:${filter.definitionId || filter.selectedItem.definitionId}`, fetchedAt: Date.now(), requests };
+  const exactId = filter.definitionId || (filter.selectedItem && filter.selectedItem.definitionId);
+  const style = chemistryStyleTarget(filter);
+  return { status: "available", price: second.rows[2].price, source: "EA third-cheapest BIN",
+    referenceIdentity: exactId ? `exact:${exactId}` : `style:${style && style.label || filter.playStyle}`, fetchedAt: Date.now(), requests };
 };

@@ -37,6 +37,13 @@ const fixturePage = {
   } },
 };
 const delayedProviders = new URLSearchParams(window.location.search).has("late-providers");
+// Exercise the real quote/parser/UI flow using fixture prices, without external requests.
+if (new URLSearchParams(window.location.search).has("chemistry-quotes")) {
+  window.GM_xmlhttpRequest = (options) => {
+    const html = '<h1>EA FC 27 Chemistry Styles</h1><table class="consumables-table"><tr class="consumableRow" data-name="Hunter" data-price-ps="2000" data-price-pc="3400"></tr><tr class="consumableRow" data-name="Anchor" data-price-ps="1000" data-price-pc="1500"></tr></table>';
+    setTimeout(() => options.onload({ status: options.url === "https://www.futbin.com/consumables" ? 200 : 404, responseText: html }), 0);
+  };
+}
 setPageForTests(delayedProviders ? {} : fixturePage);
 addFilter({ name: "Manager target", itemGroup: "managers", type: "staff", category: "manager", maxBuy: 1000, sellMode: "fixed", sellPrice: 2000 });
 openPanel();

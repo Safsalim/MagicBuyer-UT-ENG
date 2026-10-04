@@ -21,7 +21,7 @@ function env(overrides = {}) {
     const module = { exports: {} };
     modules.set(full, module.exports);
     let source = fs.readFileSync(full, "utf8");
-    if (filename.endsWith("engine.js")) source += '\nexport const testInternals = { effectiveMaxBuy, preflight, nextFilter, analyzeResults, attemptBuy, snipeCycle, sellJob, queueSale, relistAtFutbin };';
+    if (filename.endsWith("engine.js")) source += '\nexport const testInternals = { effectiveMaxBuy, preflight, nextFilter, analyzeResults, attemptBuy, snipeCycle, sellJob, queueSale, relistAtFutbin, runPreviewSearch };';
     if (filename.endsWith("fields.js")) source += '\nexport const testWriteBound = writeBound;';
     const code = babel.transform(source, { presets: [require.resolve("babel-preset-es2015")], babelrc: false }).code;
     vm.runInContext(`(function(exports, require, module) {${code}\n})`, context)(module.exports, (name) => {
@@ -46,7 +46,7 @@ function env(overrides = {}) {
     getTeamDP: () => [entry(-1, "-1", "All"), entry(20, "20", "Club")],
     getVanityColorDP: () => [entry(-1, "any", "All"), entry(1, "RED", "Red")],
     getVanityAuthenticityDP: () => [entry(-1, "any", "All"), entry(1, "authentic", "Authentic")],
-    getPlayStyleDP: () => [entry(-1, "-1", "All"), entry(250, "250", "Anchor")],
+    getPlayStyleDP: () => [entry(-1, "-1", "All"), entry(250, "250", "Anchor"), entry(251, "251", "Hunter")],
     getItemRarityDP: () => [entry(-1, -1, "All"), entry(1, 1, "Rare")],
   };
   page.setPageForTests({ SearchType, SearchCategory, ItemType, ItemSubType, factories: { DataProvider: dp }, AUCTION_MAX_BID: 15000000,
@@ -58,7 +58,7 @@ function env(overrides = {}) {
   const item = (id = 101, price = 1000, opts = {}) => Object.assign({ id, definitionId: 9001, type: "manager", subtype: 0, nationId: 18, leagueId: 13, rating: 80, rareflag: 0,
     getSearchType() { return this.type === "player" ? "player" : this.type === "kit" ? "clubInfo" : this.type === "training" ? "training" : "staff"; },
     isPlayer() { return this.type === "player"; }, isGoldRating: () => true, isBronzeRating: () => false, isSilverRating: () => false,
-    isStyleModifier() { return this.type === "training" && this.subtype === 250; },
+    isStyleModifier() { return this.type === "training" && [250, 251].includes(this.subtype); },
     isManagerLeagueModifier() { return this.type === "training" && this.subtype === 300; },
     isInjuryHealing() { return this.type === "health" && this.subtype === 400; },
     getStaticData: () => ({ name: "Manager" }),
@@ -68,6 +68,9 @@ function env(overrides = {}) {
 }
 
 const exactManager = (e, patch = {}) => e.filters.normalizeFilter(Object.assign({ itemGroup: "managers", type: "staff", category: "manager", definitionId: 9001 }, patch));
+const hunterFilter = (e, patch = {}) => e.filters.normalizeFilter(Object.assign({ itemGroup: "consumables", type: "training", category: "playStyle", playStyle: 251,
+  priceMode: "futbin", futbinPercent: 80 }, patch));
+const chemistryHtml = '<h1>EA FC 27 Chemistry Styles</h1><table class="consumables-table"><tr class="consumableRow" data-name="Hunter" data-price-ps="2000" data-price-pc="3400"></tr><tr class="consumableRow" data-name="Anchor" data-price-ps="1000" data-price-pc="1500"></tr></table>';
 
 test("legacy player defaults, group switching, category criteria and import/save round trips", () => {
   const e = env();
@@ -369,6 +372,99 @@ test("non-player quote fallback, cache age, platform separation and specific-ite
   assert.equal(broad.price, 0); assert.equal(eaRequests, 3);
   const restricted = exactManager(e, { selectedItem: e.targets.targetIdentity(e.item()), league: 13 });
   await quotes.requestItemQuote(restricted); assert.equal(futbinRequests, 3, "league-modified manager skips grouped FUTBIN reference");
+});
+
+test("a native Hunter choice fetches FUTBIN without a result, separates styles/platforms and rejects broad choices", async () => {
+  let platform = "console"; let reads = 0; let fallback = 0;
+  const e = env({
+    "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async (url) => {
+      assert.equal(url, "https://www.futbin.com/consumables"); reads += 1; return { ok: true, text: chemistryHtml };
+    } },
+    "app/prices/priceService.js": { pricePlatform: () => platform },
+    "app/prices/eaQuote.js": { discoverEaQuote: async () => { fallback += 1; throw Error("unexpected fallback"); } },
+  });
+  const quotes = e.load("app/prices/nonPlayerQuotes.js"); const f = hunterFilter(e);
+  assert.equal(f.definitionId, 0); assert.equal(f.selectedItem, null);
+  assert.equal(e.targets.hasExactTarget(f), false); assert.equal(e.targets.hasReferenceTarget(f), true);
+  const quote = await quotes.requestItemQuote(f);
+  assert.equal(quote.price, 2000); assert.equal(quote.source, "FUTBIN chemistry style"); assert.equal(quote.referenceIdentity, "style:Hunter");
+  const anchor = hunterFilter(e, { playStyle: 250 });
+  assert.equal(quotes.currentItemQuote(anchor), null);
+  assert.equal((await quotes.requestItemQuote(anchor)).price, 1000); assert.equal(reads, 1, "styles share the fetched table, never the reference");
+  platform = "pc"; assert.equal(quotes.currentItemQuote(f), null);
+  assert.equal((await quotes.requestItemQuote(f)).price, 3400);
+  for (const patch of [{ playStyle: -1 }, { playStyle: 999 }, { category: "managerLeague" }, { type: "development" }]) {
+    const invalid = hunterFilter(e, patch);
+    assert.equal(e.targets.hasReferenceTarget(invalid), false);
+    assert.equal((await quotes.requestItemQuote(invalid)).price, 0);
+  }
+  assert.equal(reads, 1); assert.equal(fallback, 0);
+});
+
+test("Hunter EA fallback discovers only matching native style auctions without a definition ID", async () => {
+  const calls = [];
+  const e = env({
+    "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async () => ({ ok: false, status: 403 }) },
+    "app/prices/priceService.js": { pricePlatform: () => "console" },
+    "app/core/market.js": { marketPageSize: () => 20, auctionOf: (i) => i._auction,
+      searchMarket: async (criteria) => {
+        calls.push(criteria);
+        const items = [e.item(1, 800, { type: "training", subtype: 251 }), e.item(2, 900, { type: "training", subtype: 251 }),
+          e.item(3, 1000, { type: "training", subtype: 251 }), e.item(4, 200, { type: "training", subtype: 250 }),
+          e.item(5, 200, { type: "training", subtype: 251, _auction: { tradeId: "5", expires: 100, buyNowPrice: 200, tradeOwner: true } })];
+        return { ok: true, items: items.filter((i) => i._auction.buyNowPrice <= criteria.maxBuy) };
+      } },
+  });
+  const quotes = e.load("app/prices/nonPlayerQuotes.js");
+  const quote = await quotes.requestItemQuote(hunterFilter(e));
+  assert.equal(quote.price, 1000); assert.equal(quote.source, "EA third-cheapest BIN"); assert.equal(quote.referenceIdentity, "style:Hunter");
+  assert.ok(calls.length > 2 && calls.length <= 20);
+  calls.forEach((c) => { assert.equal(c.playStyle, 251); assert.equal(c.type, "training"); assert.equal(c.category, "playStyle"); assert.equal(c.defId.length, 0); });
+});
+
+test("Hunter percentage pricing passes preflight and read-only preview, and still waits for a missing quote", async () => {
+  const e = tradingEnv(); const native = e.page.getPage(); native.UTSearchCriteriaDTO = function () { this.defId = []; };
+  native.services.Item = {};
+  const f = e.filters.addFilter(hunterFilter(e, { sellMode: "futbin", sellPercent: "95" }));
+  assert.equal(e.internals.preflight(), null); assert.equal(e.internals.effectiveMaxBuy(f), 1600);
+  const preview = await e.internals.runPreviewSearch(f, e.ctx().token);
+  assert.equal(preview.ok, true); assert.equal(e.calls.searches[0].playStyle, 251); assert.equal(e.calls.searches[0].maxBuy, 1600);
+  assert.equal(e.calls.bids.length, 0);
+  const bulk = e.load("app/core/bulkSell.js");
+  const resale = await bulk.matchingListingPrice(e.item(1, 1000, { type: "training", subtype: 251 }), f, e.settings.sell, e.ctx().token);
+  assert.equal(resale.price, 1900, "a specific style permits reference resale using the owned item's exact identity");
+  assert.equal(e.calls.listings.length, 0, "price calculation never lists an item");
+  e.reference.price = 0;
+  assert.equal(e.internals.effectiveMaxBuy(f), 0);
+  assert.match((await e.internals.runPreviewSearch(f, e.ctx().token)).message, /Reference unavailable/);
+  e.filters.updateFilter(f.id, { playStyle: -1 });
+  assert.match(e.internals.preflight(), /specific item/);
+});
+
+test("chemistry selection clears an old exact item, displays its quote and makes unavailable references retryable", async () => {
+  const e = env({
+    "app/core/engine.js": { isRunning: () => false },
+    "app/prices/futbinClient.js": { futbinYear: () => "27", fetchFutbinText: async () => ({ ok: true, text: chemistryHtml }) },
+    "app/prices/priceService.js": { pricePlatform: () => "console", currentPrice: () => 0, getPriceRecord: () => null, onPriceUpdate: () => () => {}, trackPrice: () => () => {} },
+    "app/prices/eaQuote.js": { discoverEaQuote: async () => { throw Error("EA unavailable"); } },
+  });
+  e.context.setInterval = () => 0;
+  const f = e.filters.addFilter(hunterFilter(e, { definitionId: 9001, selectedItem: e.targets.targetIdentity(e.item(1, 1000, { type: "training", subtype: 250 })) }));
+  const target = e.load("app/ui/pages/target.js"); const fields = e.load("app/ui/fields.js");
+  fields.testWriteBound("f:playStyleChoice", "251");
+  const active = e.filters.getActiveFilter();
+  assert.equal(active.definitionId, 0); assert.equal(active.selectedItem, null); assert.equal(active.priceMode, "futbin");
+  const quotes = e.load("app/prices/nonPlayerQuotes.js"); await quotes.requestItemQuote(active);
+  assert.match(target.targetPageHtml(), /style:Hunter/); assert.match(target.targetPageHtml(), /max buy <b>1,600/);
+  fields.testWriteBound("f:playStyleChoice", "250");
+  assert.doesNotMatch(target.targetPageHtml(), /style:Hunter/);
+  fields.testWriteBound("f:playStyleChoice", "-1");
+  assert.match(target.targetPageHtml(), /Choose a specific chemistry style/);
+  e.dp.getPlayStyleDP = () => [{ id: 252, value: "252", label: "Unknown localized style" }];
+  e.filters.updateFilter(f.id, { playStyle: 252 });
+  const unavailable = await quotes.requestItemQuote(e.filters.getActiveFilter());
+  assert.equal(unavailable.price, 0); assert.equal(quotes.itemQuoteRecord(e.filters.getActiveFilter()).reason, "EA unavailable");
+  assert.match(target.targetPageHtml(), /EA unavailable/); assert.match(target.targetPageHtml(), /Refresh reference/);
 });
 
 test("target controls reset dependent criteria and reject a Test search completed after target changes", async () => {

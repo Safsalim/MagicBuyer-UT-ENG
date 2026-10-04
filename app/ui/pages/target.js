@@ -1,6 +1,6 @@
 import { previewSearch, isRunning } from "../../core/engine";
 import { cancelTask, currentTask } from "../../core/tasks";
-import { availableGroups, GROUP_LABELS, categoryChoices, providerEntries, switchGroupPatch } from "../../core/itemTargets";
+import { availableGroups, GROUP_LABELS, categoryChoices, providerEntries, switchGroupPatch, hasReferenceTarget, chemistryStyleTarget } from "../../core/itemTargets";
 import { currentItemQuote, itemQuoteRecord, onItemQuote, requestItemQuote } from "../../prices/nonPlayerQuotes";
 import { pageGlobal } from "../../core/page";
 import {
@@ -81,7 +81,7 @@ const isDefaultName = (name) => /^(new filter|my filter|filter|nouveau filtre|mo
 const filterPrices = (filter) => {
   const parts = [];
   if (filter.priceMode === "futbin") {
-    parts.push(`≤ ${filter.futbinPercent} % FUTBIN`);
+    parts.push(`≤ ${filter.futbinPercent} % ${filter.itemGroup === "players" ? "FUTBIN" : "reference"}`);
   } else if (filter.maxBuy) {
     parts.push(`≤ ${formatCoins(filter.maxBuy)}`);
   }
@@ -102,10 +102,17 @@ const futbinLiveHtml = () => {
   if (filter.itemGroup !== "players") {
     const quote = currentItemQuote(filter);
     const record = itemQuoteRecord(filter);
+    const computed = quote ? floorPrice(quote.price * filter.futbinPercent / 100) : 0;
+    const max = filter.maxBuy ? Math.min(filter.maxBuy, computed) : computed;
+    const eligible = hasReferenceTarget(filter);
+    const message = !eligible ? "Choose a specific chemistry style or select a Test search result to fetch a reference." :
+      record && record.reason || "Fetching FUTBIN first, then EA if needed…";
     return quote ? `<div class="mb-note mb-live">${escapeHtml(quote.source)} <b>${formatCoins(quote.price)}</b>
       · ${escapeHtml(quote.referenceIdentity)} · ${Math.round((Date.now() - quote.fetchedAt) / 1000)} s ago
+      → max buy <b>${formatCoins(max)}</b>
       <button type="button" class="mb-link" data-target-action="futbin-refresh">Refresh reference</button></div>` :
-      `<div class="mb-note is-warn">${escapeHtml(record && record.reason || "Select an exact search result. Fetching FUTBIN first, then EA if needed…")}</div>`;
+      `<div class="mb-note is-warn">${escapeHtml(message)}${eligible ?
+        ' <button type="button" class="mb-link" data-target-action="futbin-refresh">Refresh reference</button>' : ""}</div>`;
   }
   const key = futbinKeyForFilter(filter);
   if (!key) {
@@ -177,7 +184,8 @@ const playerChipHtml = () => {
   if (filter && filter.itemGroup !== "players") {
     return filter.selectedItem ? `<span class="mb-chip"><span>${escapeHtml(filter.selectedItem.name)} · id ${filter.selectedItem.definitionId}</span>
       <button type="button" data-player-clear aria-label="Remove selected item">×</button></span>` :
-      `<span class="mb-empty">Search a subtype, then select a result below to target a specific item.</span>`;
+      chemistryStyleTarget(filter) ? `<span class="mb-chip">${escapeHtml(chemistryStyleTarget(filter).label)} · chemistry style</span>` :
+      `<span class="mb-empty">Choose a chemistry style, or run Test search and select a result to target a specific item.</span>`;
   }
   const player = filter && filter.player;
   if (!player) {
@@ -234,7 +242,7 @@ const categoryFieldsHtml = () => {
   }
   if (f.category === category.PLAYSTYLE) add("f:playStyleChoice", "Chemistry style", options("getPlayStyleDP"));
   fields.push(`<div class="mb-field is-wide" data-player-chip>${playerChipHtml()}</div>
-    <p class="mb-hint is-wide">Broad filters use fixed buy and sell prices. For automatic pricing, select a Test search result. Manager FUTBIN references group country and quality; league and rarity modifiers use EA.</p>`);
+    <p class="mb-hint is-wide">Broad filters use fixed buy and sell prices. For automatic pricing, choose a specific chemistry style or select a Test search result. Manager FUTBIN references group country and quality; league and rarity modifiers use EA.</p>`);
   return grid(...fields);
 };
 
@@ -389,7 +397,8 @@ const VIRTUAL = {
   playStyleField: { read: (f) => (f.playStyle > 0 ? f.playStyle : 0), write: (v) => ({ playStyle: toInt(v) || -1 }) },
 };
 ["nation", "league", "club", "playStyle", "primaryColor", "secondaryColor"].forEach((key) => {
-  VIRTUAL[`${key}Choice`] = { read: (f) => f[key], write: (v) => Object.assign({ [key]: Number(v) }, key === "league" ? { club: -1 } : {}) };
+  VIRTUAL[`${key}Choice`] = { read: (f) => f[key], write: (v, f) => Object.assign({ [key]: Number(v) }, key === "league" ? { club: -1 } : {},
+    key === "playStyle" && f.itemGroup === "consumables" ? { selectedItem: null, definitionId: 0 } : {}) };
 });
 
 registerVirtualFilterFields(VIRTUAL);
@@ -628,7 +637,11 @@ export const bindTargetPage = (page, refreshAll) => {
     }
     if (targetAction.dataset.targetAction === "futbin-refresh") {
       const filter = getActiveFilter();
-      if (filter && filter.itemGroup !== "players") { requestItemQuote(filter, { force: true }).then(renderLive); return; }
+      if (filter && filter.itemGroup !== "players") {
+        requestItemQuote(filter, { force: true }).then(renderLive);
+        renderLive();
+        return;
+      }
       const key = filter ? futbinKeyForFilter(filter) : 0;
       if (key) {
         requestPrice(key, { name: filter.player ? filter.player.name : "", rating: filter.player ? filter.player.rating : 0 }).then(renderLive);

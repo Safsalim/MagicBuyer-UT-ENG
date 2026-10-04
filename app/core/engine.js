@@ -11,7 +11,7 @@ import {
   runnableFilters,
   getFilters,
 } from "./filters";
-import { hasExactTarget, matchesItem, targetIdentity } from "./itemTargets";
+import { hasReferenceTarget, matchesItem, targetIdentity } from "./itemTargets";
 import { currentItemQuote, requestItemQuote } from "../prices/nonPlayerQuotes";
 import { resetRequestQueue, setRequestToken } from "./requestQueue";
 import { previewMatchingItems, listMatchingPreview } from "./bulkSell";
@@ -129,7 +129,7 @@ const effectiveMaxBuy = (filter) => {
 };
 
 const referencePending = (filter) =>
-  filter.priceMode === "futbin" && hasExactTarget(filter) && !effectiveMaxBuy(filter);
+  filter.priceMode === "futbin" && hasReferenceTarget(filter) && !effectiveMaxBuy(filter);
 
 // Priority tracking (≤ 2 minutes) of FUTBIN prices used by the running bot.
 const trackHot = (ctx, key, hint) => {
@@ -203,12 +203,12 @@ const preflight = () => {
   if (!filters.length) {
     return "Choose a player (or at least one criterion: quality, rarity, rating…) in the Target tab.";
   }
-  if (filters.some((filter) => (filter.priceMode === "futbin" || (filter.itemGroup !== "players" && sellModeFor(filter, settings.sell) === "futbin")) && !hasExactTarget(filter))) {
-    return "Automatic pricing requires a specific item. Select a Test search result, or use fixed buy and sell prices for broad filters.";
+  if (filters.some((filter) => (filter.priceMode === "futbin" || (filter.itemGroup !== "players" && sellModeFor(filter, settings.sell) === "futbin")) && !hasReferenceTarget(filter))) {
+    return "Automatic pricing requires a specific item. Choose a chemistry style or select a Test search result; use fixed buy and sell prices for broad filters.";
   }
   const usable = filters.filter(
     (filter) =>
-      (filter.priceMode === "futbin" ? hasExactTarget(filter) : filter.maxBuy) ||
+      (filter.priceMode === "futbin" ? hasReferenceTarget(filter) : filter.maxBuy) ||
       (settings.bid.enabled && filter.maxBid)
   );
   if (!usable.length) {
@@ -1486,7 +1486,7 @@ const runPreviewSearch = async (filter, token) => {
     return { ok: false, message: "Log in to the EA web app first." };
   }
   if (!filterHasTarget(filter)) return { ok: false, message: "Choose a subtype or a restrictive criterion first." };
-  if (filter.priceMode === "futbin" && !hasExactTarget(filter)) return { ok: false, message: "Select a specific Test search result or use fixed prices." };
+  if (filter.priceMode === "futbin" && !hasReferenceTarget(filter)) return { ok: false, message: "Choose a chemistry style, select a specific Test search result, or use fixed prices." };
   if (filter.itemGroup !== "players" && filter.priceMode === "futbin") {
     const quote = await requestItemQuote(filter, { token });
     if (!quote.price) return { ok: false, message: `Reference unavailable: ${quote.reason || "no usable price"}. Use fixed prices to browse.` };
