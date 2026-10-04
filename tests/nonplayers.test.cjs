@@ -409,3 +409,33 @@ test("target controls reset dependent criteria and reject a Test search complete
   assert.equal(element("[data-preview]").innerHTML, "", "previous empty render cache cannot keep old results visible");
   assert.equal(button.disabled, false); assert.equal(element('[data-target-action="stop-preview"]').hidden, true);
 });
+
+test("item groups recover when EA native providers load after the panel mounts", () => {
+  const e = env({
+    "app/core/engine.js": { isRunning: () => false },
+    "app/prices/priceService.js": { currentPrice: () => 0, getPriceRecord: () => null, onPriceUpdate: () => () => {}, trackPrice: () => () => {} },
+    "app/prices/nonPlayerQuotes.js": { currentItemQuote: () => null, itemQuoteRecord: () => null, onItemQuote: () => () => {} },
+  });
+  e.context.setInterval = () => 0;
+  const readyPage = e.page.getPage();
+  e.filters.addFilter({ name: "Saved player", player: { id: 12 }, maxBuy: 1000 });
+  const saved = JSON.stringify(e.filters.getActiveFilter());
+  e.page.setPageForTests({});
+  const target = e.load("app/ui/pages/target.js");
+  const elements = new Map(); let refreshes = 0;
+  const element = (selector) => {
+    if (!elements.has(selector)) elements.set(selector, { innerHTML: "", hidden: true, value: "", addEventListener() {}, setAttribute() {} });
+    return elements.get(selector);
+  };
+  const page = { querySelector: element, querySelectorAll: () => [], addEventListener() {} };
+  const refreshRuntime = target.bindTargetPage(page, () => { refreshes += 1; });
+  const select = element('[data-bind="f:itemGroupChoice"]');
+  assert.match(select.innerHTML, /Players/); assert.doesNotMatch(select.innerHTML, /Managers/);
+  e.page.setPageForTests(readyPage);
+  refreshRuntime();
+  assert.match(select.innerHTML, /Managers/); assert.match(select.innerHTML, /Club items/); assert.match(select.innerHTML, /Consumables/);
+  assert.equal(JSON.stringify(e.filters.getActiveFilter()), saved, "hydration preserves the saved player target and prices");
+  const refreshed = refreshes; refreshRuntime(); assert.equal(refreshes, refreshed, "unchanged native providers do not rebuild the form");
+  e.filters.updateFilter(e.filters.getActiveFilter().id, e.targets.switchGroupPatch("consumables"));
+  refreshRuntime(); assert.match(element("[data-category-fields]").innerHTML, /Chemistry style/);
+});

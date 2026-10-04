@@ -440,13 +440,14 @@ export const bindTargetPage = (page, refreshAll) => {
   let previewGeneration = 0;
   let previewFilterKey = "";
   let categorySignature = "";
+  let runtimeSignature = "";
 
   const warningEl = qs(page, "[data-target-warning]");
   const liveEl = qs(page, "[data-futbin-live]");
   const renderLive = () => setHtml(liveEl, futbinLiveHtml());
   const renderList = () => {
     const filter = getActiveFilter();
-    const signature = filter ? `${filter.itemGroup}:${filter.category}:${filter.league}:${filter.level}` : "";
+    const signature = filter ? `${filter.itemGroup}:${filter.category}:${filter.league}:${filter.level}:${JSON.stringify(categoryChoices(filter.itemGroup))}` : "";
     if (signature !== categorySignature) {
       categorySignature = signature;
       setHtml(qs(page, "[data-category-fields]"), categoryFieldsHtml());
@@ -679,6 +680,21 @@ export const bindTargetPage = (page, refreshAll) => {
       setActiveFilter(item.dataset.filterId);
     }
   });
+  // The panel mounts at document-start, before EA's native providers may exist.
+  // Refresh in place when the app finishes loading; never freeze the initial player-only list.
+  const refreshRuntime = () => {
+    const groups = availableGroups();
+    const filter = getActiveFilter();
+    const signature = JSON.stringify([groups, filter && categoryChoices(filter.itemGroup)]);
+    if (signature === runtimeSignature) return;
+    runtimeSignature = signature;
+    const select = qs(page, '[data-bind="f:itemGroupChoice"]');
+    setHtml(select, groups.map((group) => `<option value="${group}">${escapeHtml(GROUP_LABELS[group])}</option>`).join(""));
+    renderList();
+    refreshAll();
+  };
+  refreshRuntime();
+  return refreshRuntime;
 };
 
 // Apply a captured EA search to the active filter (or create a new one).

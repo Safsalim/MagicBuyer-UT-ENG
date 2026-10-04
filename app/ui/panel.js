@@ -50,6 +50,7 @@ const LOG_FILTERS = [
 
 let root = null;
 let ticker = null;
+let refreshTargetRuntime = () => {};
 // Global panel subscriptions: replace (never accumulate) when the panel is recreated.
 let unsubscribers = [];
 
@@ -346,7 +347,7 @@ const bindShell = () => {
     "f:maxBid": (value) => (value ? formatCoins(value) : ""),
     "s:buy.coinsReserve": (value) => (value ? formatCoins(value) : ""),
   });
-  bindTargetPage(qs(root, '[data-page="target"]'), refreshAll);
+  refreshTargetRuntime = bindTargetPage(qs(root, '[data-page="target"]'), refreshAll);
   bindSettingsPages(body, refreshAll);
   bindFutbinPage(qs(root, '[data-page="futbin"]'));
   unsubscribers.forEach((off) => off());
@@ -443,6 +444,7 @@ const bindShell = () => {
 
 export const ensurePanel = () => {
   if (root && document.body && document.body.contains(root)) {
+    refreshTargetRuntime();
     return root;
   }
   if (!document.body) {

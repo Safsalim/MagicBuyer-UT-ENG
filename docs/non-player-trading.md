@@ -6,6 +6,9 @@ Choose Players, Managers, Club items or Consumables in Target. The group and sub
 from the loaded EA web app's native search enums and data providers. A group or criterion missing
 from the running app is hidden; identifiers are not inferred from player searches.
 
+The panel may mount before EA's providers load. Starting with 5.2.1, its group and subtype choices
+refresh in place when those providers become available, preserving the saved target and prices.
+
 Group changes clear incompatible criteria and the exact target. Non-player groups expose their
 available quality, rarity, nation, league, club, authenticity, colors or chemistry-style controls.
 Changing League clears Club; changing Quality clears Rarity. Position, rating and goalkeeper rules
@@ -89,7 +92,7 @@ purchases, bids, listings or relists were performed.
 
 For a read-only check in your signed-in browser:
 
-1. Install the local rebuilt userscript and reload EA. Verify version 5.2.0 and existing player filters.
+1. Install the local rebuilt userscript and reload EA. Verify version 5.2.1 and existing player filters.
 2. Choose each exposed non-player group. Check native subtype options and dependent criteria resets.
 3. Run Test search with a fixed ceiling. Select a matching result and verify its exact ID and group.
 4. Change a criterion during another test; the old results must clear. Test Stop test as well.
