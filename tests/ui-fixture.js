@@ -1,7 +1,7 @@
 // Local, synthetic EA providers for responsive UI verification. No trading service.
 import { setPageForTests } from "../app/core/page";
 import { addFilter } from "../app/core/filters";
-import { openPanel } from "../app/ui/panel";
+import { openPanel, ensurePanel } from "../app/ui/panel";
 
 const entry = (id, value, label) => ({ id, value, label });
 const dp = {
@@ -24,7 +24,7 @@ const sampleItem = { id: 1, definitionId: 9001, type: "manager", subtype: 0, nat
   isGoldRating: () => true, isBronzeRating: () => false, isSilverRating: () => false,
   getAuctionData: () => ({ tradeId: "sample", expires: 1000, buyNowPrice: 1000 }),
 };
-setPageForTests({
+const fixturePage = {
   SearchType: { PLAYER: "player", STAFF: "staff", CLUB_INFO: "clubInfo", STADIUM: "stadium", BALL: "ball", VANITY: "vanity", CONSUMABLES_TRAINING: "training", CONSUMABLES_DEVELOPMENT: "development" },
   SearchCategory: { ANY: "any", MANAGER: "manager", KIT: "kit", BADGE: "badge", BALL: "ball", STADIUM: "stadium", PLAYSTYLE: "playStyle", MANAGER_LEAGUE: "managerLeague", HEALING: "healing" },
   ItemType: { MANAGER: "manager" }, factories: { DataProvider: dp },
@@ -35,6 +35,9 @@ setPageForTests({
     bid() { throw new Error("Trading is disabled in this synthetic fixture"); },
     list() { throw new Error("Trading is disabled in this synthetic fixture"); },
   } },
-});
+};
+const delayedProviders = new URLSearchParams(window.location.search).has("late-providers");
+setPageForTests(delayedProviders ? {} : fixturePage);
 addFilter({ name: "Manager target", itemGroup: "managers", type: "staff", category: "manager", maxBuy: 1000, sellMode: "fixed", sellPrice: 2000 });
 openPanel();
+if (delayedProviders) setTimeout(() => { setPageForTests(fixturePage); ensurePanel(); }, 1500);

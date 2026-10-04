@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        MagicBuyer-UT
-// @version     5.2.0
+// @version     5.2.1
 // @author      AMINE1921
 // @description Search, buy, bid and list players, managers, club items and consumables in EA FC 27
 // @match       https://www.ea.com/*/ea-sports-fc/ultimate-team/web-app*

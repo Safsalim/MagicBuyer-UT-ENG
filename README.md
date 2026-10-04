@@ -158,6 +158,11 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
 
+## What's new in 5.2.1
+
+- Fixed Item group staying on Players when the panel mounts before EA loads its native providers.
+  Choices refresh in place as the app initializes, preserving saved targets and pricing settings.
+
 ## What's new in 5.2.0
 
 - Category-aware manager, club-item and consumable filters with exact selection from Test search.
