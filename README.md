@@ -179,6 +179,11 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
 
+## What's new in 5.2.5
+
+- Fixed the panel and console reporting 5.2.3 after installing the 5.2.4 player-rating update.
+  The displayed version now matches the userscript's update metadata.
+
 ## What's new in 5.2.4
 
 - Any, exact and range rating controls for player groups, alongside Bronze, Silver, Gold and Special card types.
