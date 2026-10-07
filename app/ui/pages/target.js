@@ -5,6 +5,7 @@ import { currentItemQuote, itemQuoteRecord, onItemQuote, requestItemQuote } from
 import { pageGlobal } from "../../core/page";
 import {
   addFilter,
+  buyCeilingForFilter,
   describeFilter,
   duplicateFilter,
   filterHasTarget,
@@ -13,6 +14,7 @@ import {
   getLastEaSearch,
   getRotation,
   normalizeFilter,
+  ratingProblem,
   onFiltersChange,
   removeFilter,
   setActiveFilter,
@@ -83,7 +85,7 @@ const filterPrices = (filter) => {
   if (filter.priceMode === "futbin") {
     parts.push(`≤ ${filter.futbinPercent} % ${filter.itemGroup === "players" ? "FUTBIN" : "reference"}`);
   } else if (filter.maxBuy) {
-    parts.push(`≤ ${formatCoins(filter.maxBuy)}`);
+    parts.push(`${filter.buyBelow ? "<" : "≤"} ${formatCoins(filter.maxBuy)}`);
   }
   if (filter.sellMode === "fixed" && filter.sellPrice) {
     parts.push(`→ ${formatCoins(filter.sellPrice)}`);
@@ -102,8 +104,7 @@ const futbinLiveHtml = () => {
   if (filter.itemGroup !== "players") {
     const quote = currentItemQuote(filter);
     const record = itemQuoteRecord(filter);
-    const computed = quote ? floorPrice(quote.price * filter.futbinPercent / 100) : 0;
-    const max = filter.maxBuy ? Math.min(filter.maxBuy, computed) : computed;
+    const max = buyCeilingForFilter(filter, quote ? quote.price : 0);
     const eligible = hasReferenceTarget(filter);
     const message = !eligible ? "Choose a specific chemistry style or select a Test search result to fetch a reference." :
       record && record.reason || "Fetching external reference from FUTBIN…";
@@ -130,7 +131,7 @@ const futbinLiveHtml = () => {
     return `<div class="mb-note${record && record.status && record.status !== "ok" ? " is-warn" : ""}">${text}</div>`;
   }
   const computed = floorPrice((currentPrice(key, LIVE_MAX_AGE, "buy") * filter.futbinPercent) / 100);
-  const max = filter.maxBuy ? Math.min(filter.maxBuy, computed) : computed;
+  const max = buyCeilingForFilter(filter, currentPrice(key, LIVE_MAX_AGE, "buy"));
   const seconds = Math.round((Date.now() - record.fetchedAt) / 1000);
   const age = seconds < 60 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
   return `<div class="mb-note mb-live">FUTBIN <b>${formatCoins(price)}</b>${record.suspect ? " ⚠" : ""} · fetched ${age}
@@ -196,6 +197,8 @@ const playerChipHtml = () => {
 
 const targetWarningHtml = () => {
   const filter = getActiveFilter();
+  const problem = ratingProblem(filter);
+  if (problem) return `<div class="mb-note is-warn" style="margin-top:8px">${escapeHtml(problem)}</div>`;
   if (!filter || filterHasTarget(filter)) {
     return "";
   }
@@ -267,19 +270,23 @@ export const targetPageHtml = () => `
       textField({ bind: "f:name", label: "Filter name", wide: true }),
       selectField({ bind: "f:itemGroupChoice", label: "Item group", wide: true, options: availableGroups().map((v) => [v, GROUP_LABELS[v]]) }),
       `<div class="mb-field is-wide" data-show-if="f:itemGroup=players">
-        <label class="mb-label" for="mb-player-input"><span>Player</span><em data-catalog-status></em></label>
+        <label class="mb-label" for="mb-player-input"><span>Player name (optional)</span><em data-catalog-status></em></label>
         <div class="mb-player-search">
           <input id="mb-player-input" class="mb-input" type="search" autocomplete="off" spellcheck="false" placeholder="Player name (e.g. Mbappé)" data-player-input aria-autocomplete="list" aria-controls="mb-player-results" />
           <div class="mb-results" id="mb-player-results" role="listbox" data-player-results hidden></div>
         </div>
         <div style="margin-top:8px" data-player-chip>${playerChipHtml()}</div>
         <div data-target-warning>${targetWarningHtml()}</div>
-        <p class="mb-hint">All versions of the player are searched. For a specific card (TOTW, promo…), enter its version ID or filter by rating / rarity.</p>
+        <p class="mb-hint">Leave the player name empty to trade by card type or rating. You can combine both.</p>
       </div>`,
-      selectField({ bind: "f:level", label: "Quality", options: LEVELS, showIf: "f:itemGroup=players" }),
+      selectField({ bind: "f:level", label: "Card type", options: LEVELS, showIf: "f:itemGroup=players" }),
       selectField({ bind: "f:positionChoice", label: "Position", options: POSITIONS, showIf: "f:itemGroup=players" }),
-      numberField({ bind: "f:minRating", label: "Min rating", placeholder: "—", max: 99, showIf: "f:itemGroup=players" }),
-      numberField({ bind: "f:maxRating", label: "Max rating", placeholder: "—", max: 99, showIf: "f:itemGroup=players" }),
+      `<div class="mb-field is-wide" data-show-if="f:itemGroup=players" data-player-rating-fields>${grid(
+        selectField({ bind: "f:ratingModeChoice", label: "Player rating", wide: true, options: [["any", "Any rating"], ["exact", "Exact rating"], ["range", "Rating range"]] }),
+        numberField({ bind: "f:exactRating", label: "Exact rating", placeholder: "e.g. 81", min: 1, max: 99, wide: true, showIf: "f:ratingMode=exact" }),
+        numberField({ bind: "f:minRating", label: "Min rating", placeholder: "Any minimum", min: 1, max: 99, showIf: "f:ratingMode=range" }),
+        numberField({ bind: "f:maxRating", label: "Max rating", placeholder: "Any maximum", min: 1, max: 99, showIf: "f:ratingMode=range" })
+      )}<p class="mb-hint">Example: Exact rating 81, fixed buy price 700, and Strictly below. Ratings are checked on returned cards before buying or bidding; EA searches by card type and price.</p></div>`,
       `<div class="mb-field is-wide" data-category-fields>${categoryFieldsHtml()}</div>`
     )
   )}
@@ -312,6 +319,9 @@ export const targetPageHtml = () => `
         wide: true,
         hint: "Fixed mode: ceiling for matching items. Automatic mode: optional absolute cap.",
       }),
+      selectField({ bind: "f:buyComparison", label: "Buy price limit", wide: true,
+        options: [["atMost", "At or below max price"], ["below", "Strictly below max price"]],
+        hint: "Strictly below 700 buys at 650 or less. Applies to the entered max price, including an automatic-price cap." }),
       `<div class="mb-field is-wide" data-show-if="f:priceMode=futbin"><div data-futbin-live>${futbinLiveHtml()}</div></div>`,
       priceField({ bind: "f:maxBid", label: "Max bid", hint: "Used only when bidding is enabled (Buy tab)." }),
       priceField({ bind: "f:minBuy", label: "Min buy price (filter)", hint: "Optionnel." })
@@ -369,6 +379,12 @@ export const targetPageHtml = () => `
 
 // Virtual fields: convert to the filter model.
 const VIRTUAL = {
+  ratingModeChoice: { read: (f) => f.ratingMode, write: (v, f) => ({ ratingMode: v,
+    minRating: v === "any" ? 0 : v === "exact" ? f.minRating || f.maxRating : f.minRating,
+    maxRating: v === "any" ? 0 : v === "exact" ? f.minRating || f.maxRating : f.maxRating }) },
+  exactRating: { read: (f) => f.ratingMode === "exact" ? f.minRating : 0,
+    write: (v) => ({ ratingMode: "exact", minRating: toInt(v), maxRating: toInt(v) }) },
+  buyComparison: { read: (f) => f.buyBelow ? "below" : "atMost", write: (v) => ({ buyBelow: v === "below" }) },
   itemGroupChoice: { read: (f) => f.itemGroup, write: (v) => switchGroupPatch(v) },
   categoryChoice: { read: (f) => f.category, write: (v, f) => {
     const choice = categoryChoices(f.itemGroup).find((c) => String(c.category) === String(v));
@@ -760,7 +776,7 @@ export const importSnapshot = (snapshot, { asNew = false } = {}) => {
 // Effective max buy price (fixed or capped FUTBIN percentage) for page hints.
 const effectiveBuy = (filter) => {
   if (filter.priceMode !== "futbin") {
-    return toInt(filter.maxBuy);
+    return buyCeilingForFilter(filter);
   }
   const key = futbinKeyForFilter(filter);
   const quote = filter.itemGroup !== "players" ? currentItemQuote(filter) : null;
@@ -768,8 +784,7 @@ const effectiveBuy = (filter) => {
   if (!price) {
     return 0;
   }
-  const computed = floorPrice((price * filter.futbinPercent) / 100);
-  return filter.maxBuy ? Math.min(filter.maxBuy, computed) : computed;
+  return buyCeilingForFilter(filter, price);
 };
 
 // Help text below the sell price: net after tax + profit per card.

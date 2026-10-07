@@ -25,10 +25,12 @@ export const DEFAULT_FILTER = {
   club: -1,
   playStyle: -1,
   category: "any",
+  ratingMode: "any", // any | exact | range; migrated from existing rating bounds
   minRating: 0,
   maxRating: 0,
   minBuy: 0,
   maxBuy: 0, // max buy price (BIN); optional absolute cap in FUTBIN mode
+  buyBelow: false, // exclude the entered max buy price
   priceMode: "fixed", // fixed | futbin (buy at X% of the FUTBIN price)
   futbinPercent: 90,
   sellMode: "global", // global (Sell tab) | fixed | futbin
@@ -56,6 +58,7 @@ export const normalizeFilter = (raw) => {
     filter.position = "any";
     filter.zone = -1;
     filter.minRating = filter.maxRating = 0;
+    filter.ratingMode = "any";
     if (!raw || raw.futbinPercent == null) filter.futbinPercent = 80;
     if (!raw || raw.sellPercent == null) filter.sellPercent = "95";
   }
@@ -82,6 +85,17 @@ export const normalizeFilter = (raw) => {
       filter[key] = toInt(filter[key]);
     }
   );
+  filter.minRating = Math.min(99, filter.minRating);
+  filter.maxRating = Math.min(99, filter.maxRating);
+  if (filter.itemGroup === "players") {
+    const mode = raw && raw.ratingMode;
+    filter.ratingMode = ["any", "exact", "range"].includes(mode) ? mode :
+      filter.minRating && filter.minRating === filter.maxRating ? "exact" :
+      filter.minRating || filter.maxRating ? "range" : "any";
+    if (filter.ratingMode === "any") filter.minRating = filter.maxRating = 0;
+    if (filter.ratingMode === "exact") filter.maxRating = filter.minRating;
+  }
+  filter.buyBelow = filter.buyBelow === true;
   ["level", "position", "category"].forEach((key) => {
     filter[key] = filter[key] ? String(filter[key]) : "any";
   });
@@ -102,6 +116,22 @@ export const normalizeFilter = (raw) => {
 // Card whose FUTBIN price is the filter's reference (exact version, otherwise base card).
 export const futbinKeyForFilter = (filter) =>
   (filter && filter.itemGroup === "players" && (filter.definitionId || (filter.player && filter.player.id))) || 0;
+
+// Shared by search, purchase decisions and the displayed price/profit hints.
+export const buyCeilingForFilter = (filter, reference = 0) => {
+  const cap = floorPrice(toInt(filter.maxBuy) - (filter.buyBelow ? 1 : 0));
+  if (filter.priceMode !== "futbin") return cap;
+  if (!reference) return 0;
+  const computed = floorPrice(reference * filter.futbinPercent / 100);
+  return filter.maxBuy ? Math.min(cap, computed) : computed;
+};
+
+export const ratingProblem = (filter) => {
+  if (!filter || filter.itemGroup !== "players") return "";
+  if (filter.ratingMode === "exact" && !filter.minRating) return "Enter an exact player rating (1–99).";
+  if (filter.minRating && filter.maxRating && filter.minRating > filter.maxRating) return "Min rating must be at or below Max rating.";
+  return "";
+};
 
 // Migrate v4 filters (localStorage mbSavedFilters).
 const migrateLegacy = () => {
@@ -302,7 +332,7 @@ export const describeFilter = (filter) => {
     parts.push(filter.position);
   }
   if (filter.minRating || filter.maxRating) {
-    parts.push(`rating ${filter.minRating || "…"}–${filter.maxRating || "…"}`);
+    parts.push(filter.minRating === filter.maxRating ? `rating ${filter.minRating}` : `rating ${filter.minRating || "…"}–${filter.maxRating || "…"}`);
   }
   if (filter.priceMode === "futbin") {
     parts.push(`buy ≤ ${filter.futbinPercent} % ${filter.itemGroup === "players" ? "FUTBIN" : "reference"}`);
@@ -386,7 +416,7 @@ export const buildCriteria = (filter, prices = {}) => {
     criteria.maskedDefId = filter.player.id;
   }
   const minBuy = toInt(prices.minBuy != null ? prices.minBuy : filter.minBuy);
-  const maxBuy = toInt(prices.maxBuy != null ? prices.maxBuy : filter.maxBuy);
+  const maxBuy = toInt(prices.maxBuy != null ? prices.maxBuy : floorPrice(filter.maxBuy - (filter.buyBelow ? 1 : 0)));
   const minBid = toInt(prices.minBid);
   const maxBid = toInt(prices.maxBid);
   // Round maximums down and minimums up: never exceed the entered values.

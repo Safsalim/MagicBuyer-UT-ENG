@@ -552,6 +552,10 @@ export const STYLES = `
 #mb-root .mb-preview button.mb-link { min-height: 44px; text-align: left; white-space: normal; max-width: 14rem; }
 #mb-root [data-category-fields] .mb-grid { min-width: 0; }
 #mb-root .mb-grid > [data-category-fields] { padding: 0; background: none; border: 0; }
+#mb-root .mb-grid > [data-player-rating-fields] { padding: 0; background: none; border: 0; }
+#mb-root [data-player-rating-fields] .mb-input,
+#mb-root [data-bind="f:level"],
+#mb-root [data-bind="f:buyComparison"] { min-height: 44px; }
 #mb-root [data-category-fields] .mb-input { min-height: 44px; }
 #mb-root [data-category-fields] select { min-width: 0; max-width: 100%; }
 #mb-root [data-category-fields] .mb-hint.is-wide { grid-column: 1 / -1; }

@@ -3,12 +3,14 @@ import { createCancelToken, sleep, withTimeout } from "./async";
 import { KIND, classify, isFatal, parseCodeList } from "./errors";
 import {
   buildCriteria,
+  buyCeilingForFilter,
   cacheBusterPrices,
   describeFilter,
   filterHasTarget,
   futbinKeyForFilter,
   getRotation,
   runnableFilters,
+  ratingProblem,
   getFilters,
 } from "./filters";
 import { hasReferenceTarget, matchesItem, targetIdentity } from "./itemTargets";
@@ -114,9 +116,8 @@ const futbinHint = (filter) => ({
 // Effective max buy price: fixed, or X% of FUTBIN price (capped by the fixed price when set).
 // In FUTBIN mode, the filter waits without a recent price (< 5 minutes): never buy using an outdated price.
 const effectiveMaxBuy = (filter) => {
-  const cap = toInt(filter.maxBuy);
   if (filter.priceMode !== "futbin") {
-    return cap;
+    return buyCeilingForFilter(filter);
   }
   const key = futbinKeyForFilter(filter);
   const quote = filter.itemGroup !== "players" ? currentItemQuote(filter) : null;
@@ -124,8 +125,7 @@ const effectiveMaxBuy = (filter) => {
   if (!reference) {
     return 0;
   }
-  const computed = floorPrice((reference * filter.futbinPercent) / 100);
-  return cap ? Math.min(cap, computed) : computed;
+  return buyCeilingForFilter(filter, reference);
 };
 
 const referencePending = (filter) =>
@@ -200,6 +200,8 @@ const preflight = () => {
   }
   const settings = getSettings();
   const filters = runnableFilters().filter(filterHasTarget);
+  const invalidRating = runnableFilters().map(ratingProblem).find(Boolean);
+  if (invalidRating) return invalidRating;
   if (!filters.length) {
     return "Choose a player (or at least one criterion: quality, rarity, rating…) in the Target tab.";
   }
@@ -208,7 +210,7 @@ const preflight = () => {
   }
   const usable = filters.filter(
     (filter) =>
-      (filter.priceMode === "futbin" ? hasReferenceTarget(filter) : filter.maxBuy) ||
+      (filter.priceMode === "futbin" ? hasReferenceTarget(filter) : effectiveMaxBuy(filter)) ||
       (settings.bid.enabled && filter.maxBid)
   );
   if (!usable.length) {
@@ -1479,6 +1481,7 @@ const startCooldown = (ctx, error) => {
 
 // A single search without purchasing to check a filter and see market prices.
 const runPreviewSearch = async (filter, token) => {
+  if (ratingProblem(filter)) return { ok: false, message: ratingProblem(filter) };
   if (run) {
     return { ok: false, message: "Stop the bot before running a test search." };
   }

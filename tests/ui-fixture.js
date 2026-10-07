@@ -45,6 +45,11 @@ if (new URLSearchParams(window.location.search).has("chemistry-quotes")) {
   };
 }
 setPageForTests(delayedProviders ? {} : fixturePage);
-addFilter({ name: "Manager target", itemGroup: "managers", type: "staff", category: "manager", maxBuy: 1000, sellMode: "fixed", sellPrice: 2000 });
+if (new URLSearchParams(window.location.search).has("player-ratings")) {
+  addFilter({ name: "81 rated below 700", itemGroup: "players", level: "gold", minRating: 81, maxRating: 81,
+    maxBuy: 700, buyBelow: true, sellMode: "fixed", sellPrice: 900 });
+} else {
+  addFilter({ name: "Manager target", itemGroup: "managers", type: "staff", category: "manager", maxBuy: 1000, sellMode: "fixed", sellPrice: 2000 });
+}
 openPanel();
 if (delayedProviders) setTimeout(() => { setPageForTests(fixturePage); ensurePanel(); }, 1500);
