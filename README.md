@@ -25,7 +25,7 @@ releases, so their automatic update check cannot discover this fork's corrected 
 ## Quick start
 
 1. Click the **MagicBuyer** tab (EA navigation bar) or the **MB** badge in the bottom-right corner.
-2. In the **Target** tab, choose **Item group**. For players, search by name. For managers,
+2. In the **Target** tab, choose **Item group**. For players, search by name or choose a card type/rating. For managers,
    club items and consumables, choose a subtype and native criteria, then select an exact **Test search** result.
    Chemistry styles can fetch a reference directly when you choose a specific style such as Hunter.
 3. Enter the **Max buy price** (Buy Now) and, if you want to resell, the **Sell price**
@@ -35,6 +35,25 @@ releases, so their automatic update check cannot discover this fork's corrected 
 
 Alternatively, configure your search in EA's **Transfers → Transfer Market** (rarity, position, play style…)
 and click **⚡ Snipe this search** to create a filter with exactly those criteria.
+
+## Trading players by rating or card type
+
+In **Target**, choose **Players** and leave **Player name** empty to target a group:
+
+- **81-rated players below 700:** set **Player rating → Exact rating**, enter **81**, use **Fixed price**,
+  enter **Max buy price → 700**, and choose **Buy price limit → Strictly below max price**.
+- **Gold players below 700:** set **Card type → Gold**, keep **Any rating**, and use the same buy settings.
+  Bronze, Silver and Special are also available. Card type and rating can be combined.
+- **A rating range:** choose **Rating range**, then enter a minimum, a maximum, or both.
+
+**Strictly below 700** buys at **650 or less**, following EA's price tiers. **At or below** also allows
+700 and remains the default for existing filters. These limits apply to Buy Now; **Max bid** is separate.
+Use a fixed sell price per filter or in the Sell tab to resell the matching players.
+Automatic buy pricing needs a specific player/version with an external reference.
+
+EA searches by card type and price; ratings are checked on returned cards before buying or bidding
+and when matching owned players for listing. Test search only highlights cards satisfying the rating.
+Rating-only searches can return other ratings; the bot skips them. Existing rating bounds are preserved.
 
 ## Non-player trading (5.2.0)
 
@@ -159,6 +178,12 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 ```
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
+
+## What's new in 5.2.4
+
+- Any, exact and range rating controls for player groups, alongside Bronze, Silver, Gold and Special card types.
+- Strictly-below buy limits, shared by market searches, purchase decisions and price/profit hints.
+- Existing rating filters migrate automatically; invalid ranges and missing card ratings cannot qualify for purchase.
 
 ## What's new in 5.2.3
 

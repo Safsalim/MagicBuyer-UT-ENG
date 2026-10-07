@@ -68,6 +68,98 @@ function env(overrides = {}) {
 }
 
 const exactManager = (e, patch = {}) => e.filters.normalizeFilter(Object.assign({ itemGroup: "managers", type: "staff", category: "manager", definitionId: 9001 }, patch));
+
+test("player rating modes migrate, persist and change without a named player", () => {
+  const e = env();
+  assert.equal(e.filters.normalizeFilter({ minRating: 81, maxRating: 81 }).ratingMode, "exact");
+  assert.equal(e.filters.normalizeFilter({ maxRating: 84 }).ratingMode, "range");
+  assert.equal(e.filters.normalizeFilter({}).ratingMode, "any");
+  e.filters.addFilter({ maxBuy: 700 });
+  const target = e.load("app/ui/pages/target.js");
+  const fields = e.load("app/ui/fields.js");
+  fields.testWriteBound("f:ratingModeChoice", "exact");
+  assert.match(e.filters.ratingProblem(e.filters.getActiveFilter()), /Enter an exact/);
+  fields.testWriteBound("f:exactRating", 81);
+  fields.testWriteBound("f:buyComparison", "below");
+  const f = e.filters.getActiveFilter();
+  assert.equal(f.player, null); assert.equal(f.minRating, 81); assert.equal(f.maxRating, 81);
+  assert.equal(e.filters.filterHasTarget(f), true);
+  assert.match(e.filters.describeFilter(f), /rating 81$/);
+  const saved = JSON.parse(e.context.window.localStorage.getItem("mb5.filters"));
+  const restored = e.filters.normalizeFilter(saved.list.find((entry) => entry.id === f.id));
+  assert.equal(restored.ratingMode, "exact"); assert.equal(restored.buyBelow, true);
+  assert.equal(e.filters.buyCeilingForFilter(restored), 650);
+  assert.match(target.targetPageHtml(), /Exact rating/);
+  fields.testWriteBound("f:ratingModeChoice", "range");
+  fields.testWriteBound("f:maxRating", 84);
+  assert.equal(e.filters.getActiveFilter().minRating, 81);
+  assert.equal(e.filters.getActiveFilter().maxRating, 84);
+  fields.testWriteBound("f:minRating", 85);
+  assert.match(e.filters.ratingProblem(e.filters.getActiveFilter()), /Min rating/);
+  fields.testWriteBound("f:ratingModeChoice", "any");
+  assert.equal(e.filters.getActiveFilter().minRating, 0); assert.equal(e.filters.getActiveFilter().maxRating, 0);
+  assert.equal(e.filters.filterHasTarget(e.filters.getActiveFilter()), false);
+});
+
+test("81-rated purchases and preview exclude other ratings and the strict price boundary", async () => {
+  const e = tradingEnv(); e.settings.buy.skipGk = false;
+  e.page.getPage().UTSearchCriteriaDTO = function () { this.defId = []; this.maskedDefId = 0; };
+  e.page.getPage().services.Item = {};
+  const f = e.filters.addFilter({ minRating: 81, maxRating: 81, maxBuy: 700, buyBelow: true, sellMode: "fixed", sellPrice: 900 });
+  e.m.results = [e.item(1, 650, { type: "player", rating: 81 }), e.item(2, 700, { type: "player", rating: 81 }),
+    e.item(3, 600, { type: "player", rating: 80 }), e.item(4, 600, { type: "player", rating: 82 }),
+    e.item(5, 600, { type: "player", rating: 0 })];
+  assert.equal(e.internals.preflight(), null);
+  const preview = await e.internals.runPreviewSearch(f, e.ctx().token);
+  assert.equal(preview.maxBuy, 650);
+  const eligible = preview.rows.filter((row) => row.match && row.bin <= preview.maxBuy);
+  assert.equal(eligible.length, 1);
+  await e.internals.snipeCycle(e.ctx(), f, e.internals.effectiveMaxBuy(f), e.settings);
+  assert.equal(e.calls.searches[1].maxBuy, 650);
+  assert.equal(e.calls.searches[1].maskedDefId, 0);
+  assert.equal(e.calls.bids.length, 1); assert.equal(e.calls.bids[0].item.id, 1); assert.equal(e.calls.bids[0].price, 650);
+  f.buyBelow = false;
+  assert.equal(e.internals.effectiveMaxBuy(f), 700);
+  const invalid = e.filters.normalizeFilter({ level: "gold", ratingMode: "range", minRating: 85, maxRating: 81, maxBuy: 700 });
+  assert.match((await e.internals.runPreviewSearch(invalid, e.ctx().token)).message, /Min rating/);
+  assert.equal(e.calls.searches.length, 2, "invalid ratings never search");
+});
+
+test("gold, silver, bronze and special player targets constrain searches, purchases and owned items", async () => {
+  for (const [level, rating] of [["gold", 81], ["silver", 70], ["bronze", 60], ["SP", 85]]) {
+    const e = tradingEnv(); e.settings.buy.skipGk = false;
+    e.page.getPage().UTSearchCriteriaDTO = function () { this.defId = []; };
+    e.page.getPage().services.Item = {};
+    const card = (id, cardLevel, cardRating) => e.item(id, 650, { type: "player", rating: cardRating,
+      isGoldRating: () => cardLevel === "gold", isSilverRating: () => cardLevel === "silver",
+      isBronzeRating: () => cardLevel === "bronze", isSpecial: () => cardLevel === "SP" });
+    const f = e.filters.addFilter({ level, maxBuy: 700, buyBelow: true });
+    const matching = card(1, level, rating);
+    const other = card(2, level === "gold" ? "silver" : "gold", level === "gold" ? 70 : 81);
+    e.m.results = [matching, other];
+    assert.equal(e.internals.preflight(), null);
+    assert.equal(e.targets.matchesItem(matching, f), true); assert.equal(e.targets.matchesItem(other, f), false);
+    await e.internals.snipeCycle(e.ctx(), f, e.internals.effectiveMaxBuy(f), e.settings);
+    assert.equal(e.calls.searches[0].level, level); assert.equal(e.calls.searches[0].maxBuy, 650);
+    assert.equal(e.calls.bids.length, 1); assert.equal(e.calls.bids[0].item.id, 1);
+    const combined = e.filters.normalizeFilter({ ...f, ratingMode: "exact", minRating: rating + 1, maxRating: rating + 1 });
+    assert.equal(e.targets.matchesItem(matching, combined), false);
+  }
+});
+
+test("strict buy caps preserve price tiers, reference caps and the minimum price boundary", () => {
+  const e = env();
+  for (const [input, expected] of [[700, 650], [1000, 950], [10000, 9900], [50000, 49750], [100000, 99500], [150, 0]]) {
+    const f = e.filters.normalizeFilter({ level: "gold", maxBuy: input, buyBelow: true });
+    assert.equal(e.filters.buyCeilingForFilter(f), expected);
+    assert.equal(e.filters.buildCriteria(f).maxBuy, expected);
+  }
+  const automatic = e.filters.normalizeFilter({ player: { id: 12 }, priceMode: "futbin", maxBuy: 700, buyBelow: true, futbinPercent: 90 });
+  assert.equal(e.filters.buyCeilingForFilter(automatic, 1000), 650);
+  assert.equal(e.filters.buyCeilingForFilter(automatic, 600), 500);
+  assert.equal(e.filters.buyCeilingForFilter(automatic, 0), 0);
+  assert.equal(e.targets.matchesItem(e.item(1, 600, { type: "player", rating: 0 }), e.filters.normalizeFilter({ maxRating: 81 })), false);
+});
 const hunterFilter = (e, patch = {}) => e.filters.normalizeFilter(Object.assign({ itemGroup: "consumables", type: "training", category: "playStyle", playStyle: 251,
   priceMode: "futbin", futbinPercent: 80 }, patch));
 const chemistryHtml = '<h1>EA FC 27 Chemistry Styles</h1><table class="consumables-table"><tr class="consumableRow" data-name="Hunter" data-price-ps="2000" data-price-pc="3400"></tr><tr class="consumableRow" data-name="Anchor" data-price-ps="1000" data-price-pc="1500"></tr></table>';

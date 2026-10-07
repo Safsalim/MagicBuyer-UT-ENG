@@ -97,7 +97,7 @@ export const switchGroupPatch = (group) => {
   return { itemGroup: group, type: group === "players" ? (pageGlobal("SearchType") || {}).PLAYER || "player" : choice ? choice.type : null,
     category: choice ? choice.category : "any", selectedItem: null, player: null, definitionId: 0,
     level: "any", rarities: [], nation: -1, league: -1, club: -1, playStyle: -1,
-    position: "any", zone: -1, minRating: 0, maxRating: 0, authenticity: "any", primaryColor: -1, secondaryColor: -1,
+    position: "any", zone: -1, ratingMode: "any", minRating: 0, maxRating: 0, authenticity: "any", primaryColor: -1, secondaryColor: -1,
     futbinPercent: group === "players" ? 90 : 80, sellPercent: group === "players" ? "" : "95", priceMode: "fixed" };
 };
 
@@ -137,7 +137,9 @@ export const matchesItem = (item, filter, { fromSearch = false } = {}) => {
   if (filter.playStyle > 0 && !eq(filter.itemGroup === "consumables" ? item.subtype : item.playStyle, filter.playStyle)) return false;
   if (filter.authenticity !== "any" && !!item.authenticity !== (filter.authenticity === "authentic")) return false;
   if (filter.itemGroup === "players") {
+    if (filter.ratingMode === "exact" && !filter.minRating) return false;
     const rating = Number(item.rating) || 0;
+    if ((filter.minRating || filter.maxRating) && !(rating > 0)) return false;
     if ((filter.minRating && rating < filter.minRating) || (filter.maxRating && rating > filter.maxRating)) return false;
     const positions = pageGlobal("PlayerPosition") || {};
     if (filter.position !== "any" && !eq(item.preferredPosition, positions[filter.position]) && !eq(item.preferredPosition, filter.position) && !eq(item.preferredPositionName, filter.position)) return false;
