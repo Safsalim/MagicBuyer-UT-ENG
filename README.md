@@ -55,6 +55,23 @@ EA searches by card type and price; ratings are checked on returned cards before
 and when matching owned players for listing. Test search only highlights cards satisfying the rating.
 Rating-only searches can return other ratings; the bot skips them. Existing rating bounds are preserved.
 
+## Bidding on one card at an exact price
+
+In **Target → Buy & bid**, set **Trading mode → Bids only — exact amount**:
+
+1. Choose a player, enter **Bid amount** (for example **700**), and set **Bid only if ending within**
+   (for example **90S** or **5M**).
+2. Run **Test search**, then click the card result for the exact version you want. You can also enter
+   its **Exact version ID** directly. Start requires an exact version; a player name alone searches all versions for selection.
+3. Test again: green rows show eligible bids at your exact amount. Test search never places bids.
+4. Click **Start**. The bot bids exactly **700** on that version when it has at most the configured
+   time remaining. It skips expired auctions, those needing more than 700, and auctions where 700 would trigger Buy Now.
+
+This mode uses its own ending window and works with **Also place bids** disabled. Saved Buy Now prices
+are ignored while Bids only is selected. **Buy → Bids** still controls bids per search, max active bids,
+and rebidding. Rebids respect the same amount and ending window. Coin reserve and stop conditions still apply.
+Won cards follow your existing Reselling/Sell settings. Fixed bid amounts need no external price reference.
+
 ## Non-player trading (5.2.0)
 
 Managers, club items and consumables use EA's runtime categories and data providers; unavailable
@@ -178,6 +195,12 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 ```
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
+
+## What's new in 5.2.6
+
+- Per-target Bids only mode: exact card version, exact bid amount, and configurable ending window.
+- Bid previews show eligible amounts; Buy Now and buy-price references are ignored in this mode.
+- Bids and rebids check minimum increments, expiry and Buy Now boundaries before submission.
 
 ## What's new in 5.2.5
 

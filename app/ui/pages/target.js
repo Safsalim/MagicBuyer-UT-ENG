@@ -1,4 +1,5 @@
 import { previewSearch, isRunning } from "../../core/engine";
+import { bidProblem, bidsOnly } from "../../core/bidding";
 import { cancelTask, currentTask } from "../../core/tasks";
 import { availableGroups, GROUP_LABELS, categoryChoices, providerEntries, switchGroupPatch, hasReferenceTarget, chemistryStyleTarget } from "../../core/itemTargets";
 import { currentItemQuote, itemQuoteRecord, onItemQuote, requestItemQuote } from "../../prices/nonPlayerQuotes";
@@ -82,7 +83,9 @@ const isDefaultName = (name) => /^(new filter|my filter|filter|nouveau filtre|mo
 
 const filterPrices = (filter) => {
   const parts = [];
-  if (filter.priceMode === "futbin") {
+  if (bidsOnly(filter)) {
+    parts.push(`bid ${formatCoins(filter.maxBid)}`);
+  } else if (filter.priceMode === "futbin") {
     parts.push(`≤ ${filter.futbinPercent} % ${filter.itemGroup === "players" ? "FUTBIN" : "reference"}`);
   } else if (filter.maxBuy) {
     parts.push(`${filter.buyBelow ? "<" : "≤"} ${formatCoins(filter.maxBuy)}`);
@@ -98,7 +101,7 @@ const filterPrices = (filter) => {
 // Live FUTBIN price row for the active filter (% FUTBIN mode).
 const futbinLiveHtml = () => {
   const filter = getActiveFilter();
-  if (!filter || filter.priceMode !== "futbin") {
+  if (!filter || bidsOnly(filter) || filter.priceMode !== "futbin") {
     return "";
   }
   if (filter.itemGroup !== "players") {
@@ -142,8 +145,8 @@ const futbinLiveHtml = () => {
 // Track the displayed filter's FUTBIN price while the Target tab is open.
 const syncLiveTracking = () => {
   const filter = getActiveFilter();
-  if (filter && filter.itemGroup !== "players" && filter.priceMode === "futbin" && !currentItemQuote(filter)) requestItemQuote(filter);
-  const key = filter && filter.priceMode === "futbin" ? futbinKeyForFilter(filter) : 0;
+  if (filter && !bidsOnly(filter) && filter.itemGroup !== "players" && filter.priceMode === "futbin" && !currentItemQuote(filter)) requestItemQuote(filter);
+  const key = filter && !bidsOnly(filter) && filter.priceMode === "futbin" ? futbinKeyForFilter(filter) : 0;
   if (key === liveTrack.key) {
     return;
   }
@@ -189,6 +192,9 @@ const playerChipHtml = () => {
       `<span class="mb-empty">Choose a chemistry style, or run Test search and select a result to target a specific item.</span>`;
   }
   const player = filter && filter.player;
+  if (filter && filter.definitionId) {
+    return `<span class="mb-chip"><span>${player ? `${escapeHtml(player.name || "Player")} · ` : ""}Exact card version · id ${filter.definitionId}</span><button type="button" data-player-clear aria-label="Remove exact card">×</button></span>`;
+  }
   if (!player) {
     return `<span class="mb-empty">No player selected: the filter applies to all players matching the criteria.</span>`;
   }
@@ -197,7 +203,7 @@ const playerChipHtml = () => {
 
 const targetWarningHtml = () => {
   const filter = getActiveFilter();
-  const problem = ratingProblem(filter);
+  const problem = ratingProblem(filter) || (filter && bidProblem(filter, getSettings()));
   if (problem) return `<div class="mb-note is-warn" style="margin-top:8px">${escapeHtml(problem)}</div>`;
   if (!filter || filterHasTarget(filter)) {
     return "";
@@ -286,13 +292,17 @@ export const targetPageHtml = () => `
         numberField({ bind: "f:exactRating", label: "Exact rating", placeholder: "e.g. 81", min: 1, max: 99, wide: true, showIf: "f:ratingMode=exact" }),
         numberField({ bind: "f:minRating", label: "Min rating", placeholder: "Any minimum", min: 1, max: 99, showIf: "f:ratingMode=range" }),
         numberField({ bind: "f:maxRating", label: "Max rating", placeholder: "Any maximum", min: 1, max: 99, showIf: "f:ratingMode=range" })
-      )}<p class="mb-hint">Example: Exact rating 81, fixed buy price 700, and Strictly below. Ratings are checked on returned cards before buying or bidding; EA searches by card type and price.</p></div>`,
+      )}<p class="mb-hint" data-show-if="f:tradeMode=standard">Example: Exact rating 81, fixed buy price 700, and Strictly below. Ratings are checked on returned cards before buying or bidding; EA searches by card type and price.</p></div>`,
       `<div class="mb-field is-wide" data-category-fields>${categoryFieldsHtml()}</div>`
     )
   )}
   ${section(
-    "Buy price",
+    "Buy & bid",
     grid(
+      selectField({ bind: "f:tradeMode", label: "Trading mode", wide: true,
+        options: [["standard", "Buy Now / optional bids"], ["bidOnly", "Bids only — exact amount"]],
+        hint: "Bids only uses the exact card version, amount and ending window below." }),
+      `<div class="mb-field is-wide" data-buy-now-fields data-show-if="f:tradeMode=standard">${grid(
       selectField({
         bind: "f:priceMode",
         label: "Mode",
@@ -323,8 +333,13 @@ export const targetPageHtml = () => `
         options: [["atMost", "At or below max price"], ["below", "Strictly below max price"]],
         hint: "Strictly below 700 buys at 650 or less. Applies to the entered max price, including an automatic-price cap." }),
       `<div class="mb-field is-wide" data-show-if="f:priceMode=futbin"><div data-futbin-live>${futbinLiveHtml()}</div></div>`,
-      priceField({ bind: "f:maxBid", label: "Max bid", hint: "Used only when bidding is enabled (Buy tab)." }),
       priceField({ bind: "f:minBuy", label: "Min buy price (filter)", hint: "Optionnel." })
+      )}</div>`,
+      priceField({ bind: "f:maxBid", label: "Bid amount", wide: true,
+        hint: "Bids only: bid exactly this amount. Standard mode: maximum bid, enabled in the Buy tab." }),
+      rangeField({ bind: "f:bidExpiresWithin", label: "Bid only if ending within", wide: true, unit: "M",
+        showIf: "f:tradeMode=bidOnly", placeholder: "e.g. 90S or 5M", hint: "5M = five minutes or less remaining. Auctions requiring a higher bid are skipped." }),
+      `<p class="mb-hint is-wide" data-show-if="f:tradeMode=bidOnly">Choose a player, run Test search, then click the exact card result to select its version. Bids only works without enabling “Also place bids”. The Buy tab still controls bid counts and rebidding.</p>`
     )
   )}
   ${section(
@@ -429,13 +444,14 @@ const previewHtml = (result) => {
   const rows = result.rows
     .slice(0, 21)
     .map((row, index) => {
-      const deal = result.maxBuy && row.bin && row.bin <= result.maxBuy && row.match && !row.own;
-      const minutes = Math.floor(row.expires / 60);
-      const time = row.expires >= 3600 ? `${Math.floor(row.expires / 3600)} h` : `${minutes} min`;
+      const deal = result.bidOnly ? row.bidAmount > 0 : result.maxBuy && row.bin && row.bin <= result.maxBuy && row.match && !row.own;
+      const seconds = Math.ceil(row.expires);
+      const minutes = Math.floor(seconds / 60);
+      const time = seconds <= 0 ? "Ended" : seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(seconds / 3600)}h ${minutes % 60}m ${seconds % 60}s`;
       return `<tr class="${deal ? "is-deal" : row.match ? "" : "is-muted"}">
         <td><button type="button" class="mb-link" data-exact-result="${index}">${escapeHtml(row.name)}${row.rating ? ` ${row.rating}` : ""}</button>${row.own ? " (you)" : ""}</td>
         <td class="is-num">${row.bin ? formatCoins(row.bin) : "—"}</td>
-        <td class="is-num">${row.bid ? formatCoins(row.bid) : "—"}</td>
+        <td class="is-num">${row.bid ? formatCoins(row.bid) : "—"}${row.bidAmount ? `<br><small>bid ${formatCoins(row.bidAmount)}</small>` : ""}</td>
         <td class="is-num">${time}</td>
       </tr>`;
     })
@@ -448,7 +464,8 @@ const previewHtml = (result) => {
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <p class="mb-hint">${result.rows.length} result(s) · ${Math.round(result.latency)} ms${cheapest ? ` · cheapest: ${formatCoins(cheapest.bin)}` : ""}${futbin}. Green shows what the bot would buy.</p>`;
+    <p class="mb-hint">${result.rows.length} result(s) · ${Math.round(result.latency)} ms${!result.bidOnly && cheapest ? ` · cheapest: ${formatCoins(cheapest.bin)}` : ""}${futbin}. ${result.bidOnly ?
+      result.needsExactCard ? "Click a card result to select its exact version, then test again." : `Green shows eligible bids at ${formatCoins(result.bidAmount)} with ${result.bidWindowSeconds} seconds or less remaining. No bids are placed by Test search.` : "Green shows what the bot would buy."}</p>`;
 };
 
 export const bindTargetPage = (page, refreshAll) => {
@@ -602,7 +619,8 @@ export const bindTargetPage = (page, refreshAll) => {
       const filter = getActiveFilter();
       if (row && row.match && filter && previewFilterKey === JSON.stringify(filter) && row.target.group === filter.itemGroup) {
         updateFilter(filter.id, { definitionId: row.definitionId, selectedItem: filter.itemGroup === "players" ? null : row.target,
-          player: null, name: isDefaultName(filter.name) ? row.name : filter.name });
+          player: filter.itemGroup === "players" ? { id: row.definitionId & 0xffffff, name: row.name, rating: row.rating } : null,
+          name: isDefaultName(filter.name) ? row.name : filter.name });
       }
       return;
     }

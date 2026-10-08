@@ -21,7 +21,7 @@ function env(overrides = {}) {
     const module = { exports: {} };
     modules.set(full, module.exports);
     let source = fs.readFileSync(full, "utf8");
-    if (filename.endsWith("engine.js")) source += '\nexport const testInternals = { effectiveMaxBuy, preflight, nextFilter, analyzeResults, attemptBuy, snipeCycle, sellJob, queueSale, relistAtFutbin, runPreviewSearch };';
+    if (filename.endsWith("engine.js")) source += '\nexport const testInternals = { effectiveMaxBuy, preflight, nextFilter, analyzeResults, attemptBuy, snipeCycle, checkBids, initialSync, sellJob, queueSale, relistAtFutbin, runPreviewSearch };';
     if (filename.endsWith("fields.js")) source += '\nexport const testWriteBound = writeBound;';
     const code = babel.transform(source, { presets: [require.resolve("babel-preset-es2015")], babelrc: false }).code;
     vm.runInContext(`(function(exports, require, module) {${code}\n})`, context)(module.exports, (name) => {
@@ -289,6 +289,119 @@ function tradingEnv() {
     searchCount: 0, searchesSincePause: 0, filterSearches: 0, bidSearchCounter: 0, page: 1, tracked: new Map(), filterIndex: 0, userWatched: new Set(), notBefore: 0 });
   return Object.assign(e, { m, calls, state, reference, internals, settings, ctx });
 }
+
+const bidOnlyFilter = (e, patch = {}) => e.filters.normalizeFilter({ definitionId: 9001, tradeMode: "bidOnly", maxBid: 700, bidExpiresWithin: "90S", ...patch });
+const bidPlayer = (e, id, patch = {}) => e.item(id, 2000, { type: "player", rating: 81,
+  _auction: { tradeId: String(id), buyNowPrice: 2000, startingBid: 150, currentBid: 0, expires: 60, ...patch } });
+const readyForTrading = (e) => {
+  e.page.getPage().UTSearchCriteriaDTO = function () { this.defId = []; this.maskedDefId = 0; this.maxBuy = 0; this.minBuy = 0; };
+  e.page.getPage().services.Item = {};
+};
+
+test("bid-only filters persist exact amount and time, reject incomplete targets, and leave old filters unchanged", () => {
+  const e = tradingEnv(); readyForTrading(e);
+  assert.equal(e.filters.normalizeFilter({ maxBuy: 700 }).tradeMode, "standard");
+  const f = e.filters.addFilter(bidOnlyFilter(e, { definitionId: 0, player: { id: 9001 } }));
+  assert.match(e.internals.preflight(), /exact card version/);
+  e.filters.updateFilter(f.id, { definitionId: 9001, maxBid: 0 });
+  assert.match(e.internals.preflight(), /bid amount/);
+  e.filters.updateFilter(f.id, { maxBid: 700, bidExpiresWithin: "0S" });
+  assert.match(e.internals.preflight(), /positive auction ending window/);
+  e.filters.updateFilter(f.id, { bidExpiresWithin: "90S" });
+  assert.equal(e.internals.preflight(), null, "global bidding can remain disabled");
+  const saved = JSON.parse(e.context.window.localStorage.getItem("mb5.filters"));
+  const restored = e.filters.normalizeFilter(saved.list.find((v) => v.id === f.id));
+  assert.equal(restored.tradeMode, "bidOnly"); assert.equal(restored.bidExpiresWithin, "90S"); assert.equal(restored.maxBid, 700);
+});
+
+test("bid-only bids exactly 700 on the chosen version, with no Buy Now or FUTBIN dependency", async () => {
+  const e = tradingEnv(); readyForTrading(e); e.settings.buy.skipGk = false;
+  const f = e.filters.addFilter(bidOnlyFilter(e, { maxBuy: 5000, minBuy: 1000, priceMode: "futbin" }));
+  e.m.results = [bidPlayer(e, 1, { expires: 90, currentBid: 600 }), bidPlayer(e, 2, { expires: 91 }),
+    Object.assign(bidPlayer(e, 3), { definitionId: 16786217 }), bidPlayer(e, 4, { buyNowPrice: 650 }),
+    bidPlayer(e, 5, { tradeOwner: true }), bidPlayer(e, 6, { currentBid: 700 }),
+    bidPlayer(e, 7, { startingBid: 750 }), bidPlayer(e, 8, { expires: -1 })];
+  assert.equal(e.internals.preflight(), null);
+  assert.equal(e.internals.effectiveMaxBuy(f), 0);
+  assert.equal(e.filters.buyCeilingForFilter(f, 10000), 0);
+  assert.equal(e.internals.nextFilter(e.ctx(), e.settings).maxBuy, 0);
+  await e.internals.snipeCycle(e.ctx(), f, 5000, e.settings);
+  assert.deepEqual(Array.from(e.calls.searches[0].defId), [9001]);
+  assert.equal(e.calls.searches[0].maxBuy, 0); assert.equal(e.calls.searches[0].minBuy, 0); assert.equal(e.calls.searches[0].maxBid, 700);
+  assert.equal(e.calls.bids.length, 1); assert.equal(e.calls.bids[0].price, 700); assert.equal(e.calls.bids[0].item.id, 1);
+  assert.equal(e.state.stats.won || 0, 0, "placing a bid is not a Buy Now purchase");
+});
+
+test("bid plans respect expiry, minimum increments and Buy Now boundaries", () => {
+  const e = tradingEnv(); const bidding = e.load("app/core/bidding.js");
+  const rules = bidding.bidRulesForFilter(bidOnlyFilter(e), e.settings);
+  for (const [patch, expected] of [
+    [{ expires: 90 }, 700], [{ expires: 91 }, 0], [{ expires: 0 }, 0], [{ expires: -1 }, 0], [{ expires: NaN }, 0],
+    [{ currentBid: 650 }, 700], [{ currentBid: 700 }, 0], [{ startingBid: 750 }, 0],
+    [{ buyNowPrice: 700 }, 0], [{ buyNowPrice: 650 }, 0], [{ buyNowPrice: 750 }, 700], [{ tradeOwner: true }, 0],
+  ]) assert.equal(bidding.bidPriceForAuction(bidPlayer(e, 1, patch)._auction, rules), expected, JSON.stringify(patch));
+  const standard = bidding.bidRulesForFilter(e.filters.normalizeFilter({ maxBid: 700 }), { bid: { enabled: true, exact: false, expiresWithin: "5M" } });
+  assert.equal(bidding.bidPriceForAuction(bidPlayer(e, 1, { currentBid: 600 })._auction, standard), 650);
+});
+
+test("bid-only previews can select a version and show exact eligible bids without placing them", async () => {
+  const e = tradingEnv(); readyForTrading(e);
+  const broad = bidOnlyFilter(e, { definitionId: 0, player: { id: 9001 }, priceMode: "futbin" });
+  e.m.results = [bidPlayer(e, 1, { expires: 45 }), bidPlayer(e, 2, { expires: 100 }), bidPlayer(e, 3, { buyNowPrice: 700 })];
+  const selection = await e.internals.runPreviewSearch(broad, e.ctx().token);
+  assert.equal(selection.ok, true); assert.equal(selection.needsExactCard, true);
+  assert.ok(selection.rows.every((row) => !row.bidAmount));
+  assert.equal(e.calls.bids.length, 0);
+  const preview = await e.internals.runPreviewSearch({ ...broad, definitionId: 9001 }, e.ctx().token);
+  assert.equal(preview.bidOnly, true); assert.equal(preview.maxBuy, 0); assert.equal(preview.bidAmount, 700);
+  assert.equal(preview.rows.filter((row) => row.bidAmount).length, 1);
+  assert.equal(preview.rows.find((row) => row.bidAmount).bidAmount, 700);
+  assert.equal(e.calls.bids.length, 0); assert.equal(e.calls.searches[0].maxBid, 700);
+});
+
+test("bid-only respects reserves, duplicate bids, active limits and expiry while earlier bids are in flight", async () => {
+  const e = tradingEnv(); const f = bidOnlyFilter(e);
+  e.settings.buy.skipGk = false; e.m.results = [bidPlayer(e, 1)];
+  const ctx = e.ctx(); e.settings.buy.coinsReserve = 9500;
+  await e.internals.snipeCycle(ctx, f, 0, e.settings);
+  assert.equal(e.calls.bids.length, 0);
+  e.settings.buy.coinsReserve = 0; ctx.userWatched.add("1");
+  await e.internals.snipeCycle(ctx, f, 0, e.settings); assert.equal(e.calls.bids.length, 0);
+  ctx.userWatched.clear(); ctx.bids.set("other", {}); e.settings.bid.maxActive = 1;
+  await e.internals.snipeCycle(ctx, f, 0, e.settings); assert.equal(e.calls.bids.length, 0);
+  ctx.bids.clear();
+  await e.internals.snipeCycle(ctx, f, 0, e.settings); await e.internals.snipeCycle(ctx, f, 0, e.settings);
+  assert.equal(e.calls.bids.length, 1, "the same auction is not bid on twice");
+  let clock = 10000; e.context.bidClock = () => clock; vm.runInContext("Date.now = () => bidClock()", e.context);
+  e.settings.bid.maxPerSearch = 5; e.settings.bid.maxActive = 10;
+  e.m.results = [bidPlayer(e, 2, { expires: 1 }), bidPlayer(e, 3, { expires: 2 })];
+  e.m.bidOnItem = async (item, price) => { e.calls.bids.push({ item, price }); clock += 3000; return { ok: true }; };
+  await e.internals.snipeCycle(e.ctx(), f, 0, e.settings);
+  assert.equal(e.calls.bids.length, 2, "the second auction expired before its bid could be sent");
+});
+
+test("tracked bid-only auctions retain fixed rules when rebidding and process wins", async () => {
+  const e = tradingEnv(); const f = bidOnlyFilter(e);
+  e.settings.buy.skipGk = false; e.settings.bid.clearLost = false;
+  const item = bidPlayer(e, 1); e.m.results = [item]; const ctx = e.ctx();
+  await e.internals.snipeCycle(ctx, f, 0, e.settings);
+  const tracked = ctx.bids.get("1"); f.maxBid = 1000; f.bidExpiresWithin = "10M";
+  assert.equal(tracked.filter.maxBid, 700); assert.equal(tracked.filter.bidExpiresWithin, "90S");
+  e.m.fetchWatchList = async () => ({ ok: true, items: [item] });
+  e.m.refreshAuctions = async () => ({ ok: true });
+  item._auction = { ...item._auction, currentBid: 600, isOutbid: () => true };
+  await e.internals.checkBids(ctx, true);
+  assert.equal(e.calls.bids.length, 2); assert.equal(e.calls.bids[1].price, 700);
+  item._auction.currentBid = 700;
+  await e.internals.checkBids(ctx, true);
+  assert.equal(e.calls.bids.length, 2); assert.equal(ctx.bids.size, 0, "never raises above the frozen amount");
+  ctx.bids.set("1", tracked); item._auction.currentBid = 600; item._auction.expires = 120;
+  await e.internals.checkBids(ctx, true);
+  assert.equal(e.calls.bids.length, 2, "auction extension outside the ending window prevents a rebid");
+  ctx.bids.set("1", tracked); item._auction = { ...item._auction, currentBid: 700, expires: -1, isWon: () => true };
+  await e.internals.checkBids(ctx, true);
+  assert.equal(e.state.stats.won, 1); assert.equal(e.state.stats.spent, 700); assert.equal(ctx.sellQueue.length, 1);
+});
 
 test("mocked non-player purchase respects reserves, player-only rules and immutable sale configuration", async () => {
   const e = tradingEnv(); const f = exactManager(e, { maxBuy: 1000, sellMode: "fixed", sellPrice: 2000 });

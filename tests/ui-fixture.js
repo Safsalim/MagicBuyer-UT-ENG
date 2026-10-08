@@ -19,6 +19,13 @@ const dp = {
   getPlayStyleDP: () => [entry(-1, "-1", "All styles"), entry(250, "250", "Anchor"), entry(251, "251", "Hunter")],
 };
 const observable = (response) => ({ observe(scope, fn) { setTimeout(() => fn(this, response), 0); }, unobserve() {} });
+const bidOnlyPreview = new URLSearchParams(window.location.search).has("bid-only");
+const samplePlayers = [9001, 16786217].map((definitionId, index) => ({ id: 10 + index, definitionId, type: "player", rating: 81 + index,
+  rareflag: index ? 3 : 1, getSearchType: () => "player", isPlayer: () => true,
+  getStaticData: () => ({ name: index ? "Sample player · special version" : "Sample player · gold version" }),
+  isGoldRating: () => true, isBronzeRating: () => false, isSilverRating: () => false, isSpecial: () => index > 0,
+  getAuctionData: () => ({ tradeId: `sample-player-${index}`, expires: 45 + index * 60, buyNowPrice: 2000, startingBid: 150, currentBid: 500 }),
+}));
 const sampleItem = { id: 1, definitionId: 9001, type: "manager", subtype: 0, nationId: 18, leagueId: 13, rating: 80, amount: 0,
   tradable: true, getSearchType: () => "staff", getStaticData: () => ({ name: "Sample manager" }),
   isGoldRating: () => true, isBronzeRating: () => false, isSilverRating: () => false,
@@ -30,7 +37,8 @@ const fixturePage = {
   ItemType: { MANAGER: "manager" }, factories: { DataProvider: dp },
   UTSearchCriteriaDTO: function () { Object.assign(this, { rarities: [], defId: [], category: "any", count: 21 }); },
   services: { User: { getUser: () => ({ coins: { amount: 10000 } }) }, Item: {
-    clearTransferMarketCache() {}, searchTransferMarket: () => observable({ success: true, data: { items: [sampleItem] } }),
+    clearTransferMarketCache() {}, searchTransferMarket: (criteria) => observable({ success: true, data: { items: bidOnlyPreview ?
+      samplePlayers.filter((item) => !criteria.defId.length || criteria.defId.includes(item.definitionId)) : [sampleItem] } }),
     requestTransferItems: () => observable({ success: true, response: { items: [] } }),
     bid() { throw new Error("Trading is disabled in this synthetic fixture"); },
     list() { throw new Error("Trading is disabled in this synthetic fixture"); },
@@ -45,7 +53,10 @@ if (new URLSearchParams(window.location.search).has("chemistry-quotes")) {
   };
 }
 setPageForTests(delayedProviders ? {} : fixturePage);
-if (new URLSearchParams(window.location.search).has("player-ratings")) {
+if (bidOnlyPreview) {
+  addFilter({ name: "Sample player · bid 700", itemGroup: "players", player: { id: 9001, name: "Sample player", rating: 81 },
+    tradeMode: "bidOnly", maxBuy: 2000, maxBid: 700, bidExpiresWithin: "90S", sellMode: "fixed", sellPrice: 900 });
+} else if (new URLSearchParams(window.location.search).has("player-ratings")) {
   addFilter({ name: "81 rated below 700", itemGroup: "players", level: "gold", minRating: 81, maxRating: 81,
     maxBuy: 700, buyBelow: true, sellMode: "fixed", sellPrice: 900 });
 } else {
