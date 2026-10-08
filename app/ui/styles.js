@@ -553,6 +553,11 @@ export const STYLES = `
 #mb-root [data-category-fields] .mb-grid { min-width: 0; }
 #mb-root .mb-grid > [data-category-fields] { padding: 0; background: none; border: 0; }
 #mb-root .mb-grid > [data-player-rating-fields] { padding: 0; background: none; border: 0; }
+#mb-root .mb-grid > [data-buy-now-fields] { padding: 0; background: none; border: 0; }
+#mb-root [data-bind="f:tradeMode"],
+#mb-root [data-bind="f:maxBid"],
+#mb-root [data-bind="f:bidExpiresWithin"] { min-height: 44px; }
+#mb-root .mb-step[data-for="f:maxBid"] { min-width: 44px; min-height: 44px; }
 #mb-root [data-player-rating-fields] .mb-input,
 #mb-root [data-bind="f:level"],
 #mb-root [data-bind="f:buyComparison"] { min-height: 44px; }

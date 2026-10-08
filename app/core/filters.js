@@ -37,6 +37,8 @@ export const DEFAULT_FILTER = {
   sellPrice: 0,
   sellPercent: "",
   maxBid: 0,
+  tradeMode: "standard", // standard | bidOnly (exact amount, exact version)
+  bidExpiresWithin: "5M",
 };
 
 const STORAGE_KEY = "filters";
@@ -96,6 +98,8 @@ export const normalizeFilter = (raw) => {
     if (filter.ratingMode === "exact") filter.maxRating = filter.minRating;
   }
   filter.buyBelow = filter.buyBelow === true;
+  filter.tradeMode = filter.tradeMode === "bidOnly" ? "bidOnly" : "standard";
+  filter.bidExpiresWithin = String(filter.bidExpiresWithin == null ? "5M" : filter.bidExpiresWithin).trim();
   ["level", "position", "category"].forEach((key) => {
     filter[key] = filter[key] ? String(filter[key]) : "any";
   });
@@ -119,6 +123,7 @@ export const futbinKeyForFilter = (filter) =>
 
 // Shared by search, purchase decisions and the displayed price/profit hints.
 export const buyCeilingForFilter = (filter, reference = 0) => {
+  if (filter.tradeMode === "bidOnly") return 0;
   const cap = floorPrice(toInt(filter.maxBuy) - (filter.buyBelow ? 1 : 0));
   if (filter.priceMode !== "futbin") return cap;
   if (!reference) return 0;
@@ -335,8 +340,9 @@ export const describeFilter = (filter) => {
     parts.push(filter.minRating === filter.maxRating ? `rating ${filter.minRating}` : `rating ${filter.minRating || "…"}–${filter.maxRating || "…"}`);
   }
   if (filter.priceMode === "futbin") {
-    parts.push(`buy ≤ ${filter.futbinPercent} % ${filter.itemGroup === "players" ? "FUTBIN" : "reference"}`);
+    if (filter.tradeMode !== "bidOnly") parts.push(`buy ≤ ${filter.futbinPercent} % ${filter.itemGroup === "players" ? "FUTBIN" : "reference"}`);
   }
+  if (filter.tradeMode === "bidOnly") parts.push(`bid ${filter.maxBid} · ends within ${filter.bidExpiresWithin}`);
   return parts.join(" · ");
 };
 
@@ -415,8 +421,8 @@ export const buildCriteria = (filter, prices = {}) => {
   } else if (filter.player && filter.player.id > 0) {
     criteria.maskedDefId = filter.player.id;
   }
-  const minBuy = toInt(prices.minBuy != null ? prices.minBuy : filter.minBuy);
-  const maxBuy = toInt(prices.maxBuy != null ? prices.maxBuy : floorPrice(filter.maxBuy - (filter.buyBelow ? 1 : 0)));
+  const minBuy = filter.tradeMode === "bidOnly" ? 0 : toInt(prices.minBuy != null ? prices.minBuy : filter.minBuy);
+  const maxBuy = filter.tradeMode === "bidOnly" ? 0 : toInt(prices.maxBuy != null ? prices.maxBuy : floorPrice(filter.maxBuy - (filter.buyBelow ? 1 : 0)));
   const minBid = toInt(prices.minBid);
   const maxBid = toInt(prices.maxBid);
   // Round maximums down and minimums up: never exceed the entered values.

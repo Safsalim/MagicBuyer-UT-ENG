@@ -38,12 +38,12 @@ export const buyPageHtml = () => `
   ${section(
     "Bids",
     grid(
-      toggleField({ bind: "s:bid.enabled", label: "Also place bids", wide: true, hint: "Bid on cards that expire soon, up to the filter's “Max bid”." }),
+      toggleField({ bind: "s:bid.enabled", label: "Also place bids", wide: true, hint: "Standard targets: bid up to the Target tab's amount. Bids-only targets are enabled separately and use their own ending window." }),
       rangeField({ bind: "s:bid.expiresWithin", label: "If ending within", unit: "M", placeholder: "5M", hint: "S, M, or H (e.g. 90S, 5M)" }),
       numberField({ bind: "s:bid.maxPerSearch", label: "Bids per search", min: 1, max: 5 }),
       numberField({ bind: "s:bid.searchEvery", label: "Search for bids every", min: 2, max: 20, hint: "searches, when the filter also has a max buy price" }),
       numberField({ bind: "s:bid.maxActive", label: "Max active bids", min: 1, max: 50 }),
-      toggleField({ bind: "s:bid.exact", label: "Bid the maximum directly" }),
+      toggleField({ bind: "s:bid.exact", label: "Bid the maximum directly", hint: "Standard targets only. Bids-only targets always bid their exact amount." }),
       toggleField({ bind: "s:bid.rebid", label: "Rebid when outbid" }),
       toggleField({ bind: "s:bid.clearLost", label: "Remove lost bids from watch list", wide: true })
     )
