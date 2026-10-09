@@ -208,6 +208,12 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
 
+## What's new in 5.2.8
+
+- Transfers → **List all available cards** lists all tradeable Available items at one Buy Now price, with the starting bid exactly 100 coins lower (for example 1,300 / 1,200).
+- Uses the Sell tab's listing duration, independently of Target filters, FUTBIN pricing and automatic sell settings. Active, sold and unsold auctions are skipped.
+- Enter a valid EA price of at least 250. Both prices must fit EA increments; cards with unavailable or incompatible price limits are skipped instead of changing your price. Stop cancels remaining listings.
+
 ## What's new in 5.2.7
 
 - Rating/type filters now load matching exact card versions and rotate one card per search.

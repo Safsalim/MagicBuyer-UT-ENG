@@ -190,6 +190,8 @@ export const STYLES = `
 #mb-root .mb-btn-ghost { background: var(--mb-card-2); color: var(--mb-text); }
 #mb-root .mb-btn-danger { background: rgba(255,93,108,0.14); color: #ff8e99; }
 #mb-root .mb-btn-sm { min-height: 30px; padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+#mb-root .mb-fixed-list-actions { margin-top: 8px; }
+#mb-root .mb-fixed-list-actions .mb-btn { min-height: 44px; }
 /* ---------------- KPIs */
 #mb-root .mb-kpis {
   display: grid;

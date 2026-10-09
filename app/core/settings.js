@@ -83,6 +83,7 @@ export const DEFAULT_SETTINGS = {
     stopCodes: "",
   },
   transfer: {
+    listPrice: 0,
     checkEvery: 8,
     relistExpired: false,
     relistMode: "same",
