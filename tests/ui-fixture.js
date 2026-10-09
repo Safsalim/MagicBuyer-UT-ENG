@@ -20,6 +20,14 @@ const dp = {
 };
 const observable = (response) => ({ observe(scope, fn) { setTimeout(() => fn(this, response), 0); }, unobserve() {} });
 const bidOnlyPreview = new URLSearchParams(window.location.search).has("bid-only");
+const ratingPreview = new URLSearchParams(window.location.search).has("player-ratings");
+if (ratingPreview) {
+  window.GM_xmlhttpRequest = (opts) => {
+    const cards = [9001, 9002, 9003].map((eaId, index) => ({ eaId, basePlayerEaId: eaId, cardName: `Sample gold player ${index + 1}`,
+      game: "27", overall: 81, isSpecial: false, rarityEaId: 0, position: "CM" }));
+    setTimeout(() => opts.onload({ status: 200, responseText: JSON.stringify({ data: cards, total: 3, currentPage: 1, next: null }) }), 0);
+  };
+}
 const samplePlayers = [9001, 16786217].map((definitionId, index) => ({ id: 10 + index, definitionId, type: "player", rating: 81 + index,
   rareflag: index ? 3 : 1, getSearchType: () => "player", isPlayer: () => true,
   getStaticData: () => ({ name: index ? "Sample player · special version" : "Sample player · gold version" }),
@@ -38,7 +46,10 @@ const fixturePage = {
   UTSearchCriteriaDTO: function () { Object.assign(this, { rarities: [], defId: [], category: "any", count: 21 }); },
   services: { User: { getUser: () => ({ coins: { amount: 10000 } }) }, Item: {
     clearTransferMarketCache() {}, searchTransferMarket: (criteria) => observable({ success: true, data: { items: bidOnlyPreview ?
-      samplePlayers.filter((item) => !criteria.defId.length || criteria.defId.includes(item.definitionId)) : [sampleItem] } }),
+      samplePlayers.filter((item) => !criteria.defId.length || criteria.defId.includes(item.definitionId)) : ratingPreview ?
+      (criteria.defId || []).map((definitionId) => ({ ...samplePlayers[0], definitionId, rareflag: 0,
+        getStaticData: () => ({ name: `Sample gold player ${definitionId - 9000}` }),
+        getAuctionData: () => ({ tradeId: `rating-${definitionId}`, expires: 60, buyNowPrice: 650, startingBid: 150 }) })) : [sampleItem] } }),
     requestTransferItems: () => observable({ success: true, response: { items: [] } }),
     bid() { throw new Error("Trading is disabled in this synthetic fixture"); },
     list() { throw new Error("Trading is disabled in this synthetic fixture"); },

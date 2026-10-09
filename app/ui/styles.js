@@ -553,6 +553,9 @@ export const STYLES = `
 #mb-root [data-category-fields] .mb-grid { min-width: 0; }
 #mb-root .mb-grid > [data-category-fields] { padding: 0; background: none; border: 0; }
 #mb-root .mb-grid > [data-player-rating-fields] { padding: 0; background: none; border: 0; }
+#mb-root .mb-rating-list summary { cursor: pointer; min-height: 44px; padding: 0.5rem 0; display: list-item; }
+#mb-root .mb-rating-list ul { max-height: 14rem; overflow: auto; padding-left: 1.25rem; margin: 0; overflow-wrap: anywhere; }
+#mb-root [data-target-action="rating-refresh"] { min-height: 44px; }
 #mb-root .mb-grid > [data-buy-now-fields] { padding: 0; background: none; border: 0; }
 #mb-root [data-bind="f:tradeMode"],
 #mb-root [data-bind="f:maxBid"],

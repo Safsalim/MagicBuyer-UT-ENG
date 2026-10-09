@@ -2,7 +2,7 @@ module.exports = {
   headers: {
     name: "MagicBuyer-UT",
     namespace: "http://tampermonkey.net/",
-    version: "5.2.6",
+    version: "5.2.7",
     description: "Search, buy, bid and list players, managers, club items and consumables in EA FC 27",
     author: "AMINE1921",
     match: [
@@ -20,6 +20,8 @@ module.exports = {
       "ea.com",
       "futbin.com",
       "www.futbin.com",
+      "fut.gg",
+      "www.fut.gg",
       "discord.com",
       "discordapp.com",
       "api.telegram.org",
