@@ -51,9 +51,21 @@ In **Target**, choose **Players** and leave **Player name** empty to target a gr
 Use a fixed sell price per filter or in the Sell tab to resell the matching players.
 Automatic buy pricing needs a specific player/version with an external reference.
 
-EA searches by card type and price; ratings are checked on returned cards before buying or bidding
-and when matching owned players for listing. Test search only highlights cards satisfying the rating.
-Rating-only searches can return other ratings; the bot skips them. Existing rating bounds are preserved.
+Rating filters with no player or exact version selected load a list of matching card versions and
+rotate through it, searching **one exact card version per search**. For example, rating 81 + Gold
+searches each 81-rated Gold card in turn, then wraps to the first card. Rating ranges work the same way.
+Additional nation, league, club, rarity and position criteria narrow the list; EA criteria and final
+rating checks still apply before buying or bidding. Each rating filter keeps its own rotation cursor.
+
+The Target tab shows the full matching list and a **Reload card list** button. Lists use FUT.GG's
+public card metadata, cached for 30 minutes; prices still use your existing fixed/FUTBIN settings.
+This is a card catalogue integration, not a switch of price providers. SBC/objective, evolved and loan
+cards are excluded. A failed, incomplete or empty list never falls back to an unrestricted market search.
+Very broad ranges exceeding 3,000 catalogue cards require a narrower range.
+
+Test search advances through the same list separately, showing the current card and list position.
+Selecting an exact result pins that card and ends group rotation for the filter. Existing rating bounds
+are preserved; named-player targets and Bids only keep their existing behavior.
 
 ## Bidding on one card at an exact price
 
@@ -195,6 +207,12 @@ $env:NODE_OPTIONS = '--openssl-legacy-provider'
 ```
 
 The script is generated at `dist/fut-auto-buyer.user.js` (Tampermonkey header in `tampermonkey-header.js`).
+
+## What's new in 5.2.7
+
+- Rating/type filters now load matching exact card versions and rotate one card per search.
+- The Target tab shows the complete list and supports reloading it; Test search also rotates.
+- Added FUT.GG access for card metadata only. Price sources are unchanged; missing lists never trigger broad searches.
 
 ## What's new in 5.2.6
 

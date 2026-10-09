@@ -1,5 +1,6 @@
 import { startKeepAlive, stopKeepAlive, unlockAudio } from "./audio";
 import { bidPriceForAuction, bidProblem, bidRulesForFilter, bidsOnly, exactCardId } from "./bidding";
+import { selectRatingTarget, usesRatingRotation } from "./ratingTargets";
 import { createCancelToken, sleep, withTimeout } from "./async";
 import { KIND, classify, isFatal, parseCodeList } from "./errors";
 import {
@@ -663,6 +664,21 @@ const nextWait = (ctx, cycleStart) => {
 
 const snipeCycle = async (ctx, filter, maxBuy, settings) => {
   if (bidProblem(filter, settings)) return;
+  const rated = await selectRatingTarget(ctx, filter);
+  if (rated.cancelled) return;
+  const current = getFilters().find((saved) => saved.id === filter.id);
+  if (current && JSON.stringify(current) !== JSON.stringify(filter)) return;
+  if (rated.error) {
+    log.error(`${filter.name}: ${rated.error}`);
+    stopBot(`Rating card list unavailable: ${rated.error}`, { alert: true });
+    return;
+  }
+  if (rated.card) {
+    filter = rated.filter;
+    ctx.page = 1;
+    updateState({ filterName: `${filter.name} · ${rated.card.name} ${rated.card.rating} (${rated.index + 1}/${rated.total})` });
+    log.info(`Rating rotation ${rated.index + 1}/${rated.total}: ${rated.card.name} ${rated.card.rating} · version ${rated.card.definitionId}.`);
+  }
   if (bidsOnly(filter)) maxBuy = 0;
   const bidOn = bidRulesForFilter(filter, settings).enabled && floorPrice(filter.maxBid) > 0;
   // With a max buy price, EA returns only listings below that price: bids
@@ -1478,6 +1494,7 @@ const startCooldown = (ctx, error) => {
 // --------------------------------------------------------- test search
 
 // A single search without purchasing to check a filter and see market prices.
+const previewRatingCursors = new Map();
 const runPreviewSearch = async (filter, token) => {
   if (ratingProblem(filter)) return { ok: false, message: ratingProblem(filter) };
   const settings = getSettings();
@@ -1491,6 +1508,11 @@ const runPreviewSearch = async (filter, token) => {
     return { ok: false, message: "Log in to the EA web app first." };
   }
   if (!filterHasTarget(filter)) return { ok: false, message: "Choose a subtype or a restrictive criterion first." };
+  if (usesRatingRotation(filter) && filter.priceMode === "futbin") return { ok: false, message: "Use a fixed buy price for a rating card list, or select one exact card for automatic pricing." };
+  const rated = await selectRatingTarget({ token, ratingCursors: previewRatingCursors }, filter);
+  if (rated.cancelled) return { ok: false, message: "Test search cancelled." };
+  if (rated.error) return { ok: false, message: rated.error };
+  filter = rated.filter;
   if (!only && filter.priceMode === "futbin" && !hasReferenceTarget(filter)) return { ok: false, message: "Choose a chemistry style, select a specific Test search result, or use fixed prices." };
   if (!only && filter.itemGroup !== "players" && filter.priceMode === "futbin") {
     const quote = await requestItemQuote(filter, { token });
@@ -1527,7 +1549,8 @@ const runPreviewSearch = async (filter, token) => {
       };
     })
     .sort((a, b) => only ? a.expires - b.expires : a.bin - b.bin);
-  return { ok: true, rows, latency: result.latency, maxBuy, bidOnly: only, bidAmount: rules.maxBid,
+  return { ok: true, rows, latency: result.latency, maxBuy, ratingTarget: rated.card,
+    ratingTargetIndex: rated.index, ratingTargetCount: rated.total, bidOnly: only, bidAmount: rules.maxBid,
     bidWindowSeconds: rules.windowSeconds, needsExactCard: only && !exactCardId(filter),
     futbinPrice: key ? currentPrice(key, BUY_PRICE_MAX_AGE) : 0 };
 };

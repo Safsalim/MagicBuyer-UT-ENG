@@ -1,5 +1,6 @@
 import { previewSearch, isRunning } from "../../core/engine";
 import { bidProblem, bidsOnly } from "../../core/bidding";
+import { loadRatingTargets, onRatingTargetsChange, ratingTargetsKey, ratingTargetsRecord, usesRatingRotation } from "../../core/ratingTargets";
 import { cancelTask, currentTask } from "../../core/tasks";
 import { availableGroups, GROUP_LABELS, categoryChoices, providerEntries, switchGroupPatch, hasReferenceTarget, chemistryStyleTarget } from "../../core/itemTargets";
 import { currentItemQuote, itemQuoteRecord, onItemQuote, requestItemQuote } from "../../prices/nonPlayerQuotes";
@@ -76,6 +77,7 @@ let unsubscribePrices = null;
 let liveTrack = { key: 0, untrack: null };
 let liveTimer = null;
 let unsubscribeItemQuotes = null;
+let unsubscribeRatingTargets = null;
 
 const LIVE_MAX_AGE = 5 * 60 * 1000;
 
@@ -211,6 +213,19 @@ const targetWarningHtml = () => {
   return `<div class="mb-note is-warn" style="margin-top:8px">Choose a specific item, subtype, or restrictive criterion before searching.</div>`;
 };
 
+const ratingListHtml = () => {
+  const filter = getActiveFilter();
+  if (!usesRatingRotation(filter) || ratingProblem(filter)) return "";
+  const record = ratingTargetsRecord(filter);
+  const refresh = '<button type="button" class="mb-link" data-target-action="rating-refresh">Reload card list</button>';
+  if (record.status === "error") return `<div class="mb-note is-warn">${escapeHtml(record.message)} ${refresh}</div>`;
+  if (record.status !== "ready") return '<div class="mb-note">Loading cards matching your rating and type…</div>';
+  if (!record.cards.length) return `<div class="mb-note is-warn">No cards match this rating and type. Adjust your criteria. ${refresh}</div>`;
+  return `<div class="mb-note"><details class="mb-rating-list"><summary>${record.cards.length} matching card versions · rotates every search</summary>
+    <ul>${record.cards.map((card) => `<li>${escapeHtml(card.name)} · ${card.rating} · ${card.special ? "Special" : escapeHtml(card.level)} · #${card.definitionId}</li>`).join("")}</ul>
+    </details><p class="mb-hint">Card list: FUT.GG metadata only. Your buy and sell price settings stay the same.</p>${refresh}</div>`;
+};
+
 const lastEaHtml = () => {
   const snapshot = getLastEaSearch();
   if (!snapshot) {
@@ -292,7 +307,7 @@ export const targetPageHtml = () => `
         numberField({ bind: "f:exactRating", label: "Exact rating", placeholder: "e.g. 81", min: 1, max: 99, wide: true, showIf: "f:ratingMode=exact" }),
         numberField({ bind: "f:minRating", label: "Min rating", placeholder: "Any minimum", min: 1, max: 99, showIf: "f:ratingMode=range" }),
         numberField({ bind: "f:maxRating", label: "Max rating", placeholder: "Any maximum", min: 1, max: 99, showIf: "f:ratingMode=range" })
-      )}<p class="mb-hint" data-show-if="f:tradeMode=standard">Example: Exact rating 81, fixed buy price 700, and Strictly below. Ratings are checked on returned cards before buying or bidding; EA searches by card type and price.</p></div>`,
+      )}<p class="mb-hint" data-show-if="f:tradeMode=standard">With no player selected, rating filters load a matching card list and search one exact version at a time. Choose Gold, Silver, Bronze or Special to narrow the list.</p><div data-rating-list>${ratingListHtml()}</div></div>`,
       `<div class="mb-field is-wide" data-category-fields>${categoryFieldsHtml()}</div>`
     )
   )}
@@ -458,7 +473,8 @@ const previewHtml = (result) => {
     .join("");
   const cheapest = result.rows.find((row) => row.bin && row.match && !row.own);
   const futbin = result.futbinPrice ? ` · FUTBIN ${formatCoins(result.futbinPrice)} → max buy ${formatCoins(result.maxBuy)}` : "";
-  return `<div class="mb-preview">
+  const rating = result.ratingTarget ? `<div class="mb-note">Rating rotation ${result.ratingTargetIndex + 1}/${result.ratingTargetCount}: ${escapeHtml(result.ratingTarget.name)} ${result.ratingTarget.rating} · version ${result.ratingTarget.definitionId}. Test again to search the next card.</div>` : "";
+  return `${rating}<div class="mb-preview">
       <table>
         <thead><tr><th>Card</th><th class="is-num">Buy Now</th><th class="is-num">Bid</th><th class="is-num">Ends</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -486,6 +502,7 @@ export const bindTargetPage = (page, refreshAll) => {
 
   const warningEl = qs(page, "[data-target-warning]");
   const liveEl = qs(page, "[data-futbin-live]");
+  const ratingListEl = qs(page, "[data-rating-list]");
   const renderLive = () => setHtml(liveEl, futbinLiveHtml());
   const renderList = () => {
     const filter = getActiveFilter();
@@ -500,6 +517,8 @@ export const bindTargetPage = (page, refreshAll) => {
     setHtml(lastEa, lastEaHtml());
     syncLiveTracking();
     renderLive();
+    setHtml(ratingListEl, ratingListHtml());
+    if (usesRatingRotation(filter) && !ratingProblem(filter)) loadRatingTargets(filter);
   };
 
   if (unsubscribeFilters) {
@@ -514,6 +533,11 @@ export const bindTargetPage = (page, refreshAll) => {
     if (currentTask() && currentTask().label === "Test search") cancelTask();
     renderList();
     refreshAll();
+  });
+  if (unsubscribeRatingTargets) unsubscribeRatingTargets();
+  unsubscribeRatingTargets = onRatingTargetsChange((key) => {
+    const filter = getActiveFilter();
+    if (usesRatingRotation(filter) && ratingTargetsKey(filter) === key) setHtml(ratingListEl, ratingListHtml());
   });
   if (unsubscribePrices) {
     unsubscribePrices();
@@ -663,6 +687,11 @@ export const bindTargetPage = (page, refreshAll) => {
     }
     const targetAction = target.closest("[data-target-action]");
     if (!targetAction) {
+      return;
+    }
+    if (targetAction.dataset.targetAction === "rating-refresh") {
+      const filter = getActiveFilter();
+      if (usesRatingRotation(filter)) await loadRatingTargets(filter, { force: true });
       return;
     }
     if (targetAction.dataset.targetAction === "stop-preview") {

@@ -13,7 +13,10 @@ function env(overrides = {}) {
     document: { createElement: () => ({}) }, performance, URL,
   });
   const root = path.resolve(__dirname, "..");
-  const mocks = new Map(Object.entries(overrides).map(([key, val]) => [path.resolve(root, key), Object.assign(val, { __esModule: true })]));
+  const defaultCard = { definitionId: 9001, baseId: 9001, name: "Sample player", rating: 81, level: "gold", special: false,
+    rarity: 0, nation: 18, league: 13, club: 20, position: "CM" };
+  const defaults = { "app/services/datasource/playerCards.js": { loadPlayerCardCatalog: async () => [defaultCard] } };
+  const mocks = new Map(Object.entries({ ...defaults, ...overrides }).map(([key, val]) => [path.resolve(root, key), Object.assign(val, { __esModule: true })]));
   const load = (filename) => {
     const full = path.resolve(root, filename);
     if (mocks.has(full)) return mocks.get(full);
@@ -258,7 +261,7 @@ test("EA reads share configured pacing and urgent purchases still respect rate c
   assert.equal(sent[2] - rateAt, 60000, "Buy Now bypasses search spacing, never an EA cooldown");
 });
 
-function tradingEnv() {
+function tradingEnv(overrides = {}) {
   const calls = { bids: [], listings: [], moves: [], searches: [] };
   const state = { stats: { won: 0 }, transfer: null };
   const reference = { price: 2000, status: "available", fetchedAt: Date.now(), source: "FUTBIN chemistry style" };
@@ -282,6 +285,7 @@ function tradingEnv() {
     "app/core/state.js": { getState: () => state, bumpStat: (key, n = 1) => { state.stats[key] = (state.stats[key] || 0) + n; }, updateState: () => {}, recordSearch: () => {}, recordTransaction: () => {}, resetStats: () => {} },
     "app/prices/priceService.js": priceService,
     "app/prices/nonPlayerQuotes.js": quoteService,
+    ...overrides,
   });
   const internals = e.load("app/core/engine.js").testInternals;
   const settings = e.load("app/core/settings.js").getSettings();
@@ -297,6 +301,136 @@ const readyForTrading = (e) => {
   e.page.getPage().UTSearchCriteriaDTO = function () { this.defId = []; this.maskedDefId = 0; this.maxBuy = 0; this.minBuy = 0; };
   e.page.getPage().services.Item = {};
 };
+
+const ratingCard = (id, patch = {}) => ({ definitionId: id, baseId: id & 0xffffff, name: `Player ${id}`, rating: 81,
+  level: "gold", special: false, rarity: 0, nation: 18, league: 13, club: 20, position: "CM", ...patch });
+
+test("rating lists filter exact versions by rating, type and native criteria, without limiting to 20 cards", async () => {
+  const cards = Array.from({ length: 45 }, (_, index) => ratingCard(9001 + index));
+  cards.push(ratingCard(17000000, { special: true, rarity: 3 }), ratingCard(9999, { rating: 82 }), ratingCard(10000, { nation: 52 }));
+  let reads = 0;
+  const e = env({ "app/services/datasource/playerCards.js": { loadPlayerCardCatalog: async () => { reads += 1; return cards; } } });
+  const targets = e.load("app/core/ratingTargets.js");
+  const f = e.filters.normalizeFilter({ minRating: 81, maxRating: 81, level: "gold", nation: 18 });
+  const list = await targets.loadRatingTargets(f);
+  assert.equal(list.cards.length, 45);
+  assert.ok(list.cards.every((card) => card.rating === 81 && !card.special));
+  await targets.loadRatingTargets(f); assert.equal(reads, 1, "fresh lists are reused");
+  const specials = await targets.loadRatingTargets({ ...f, level: "SP", nation: -1 });
+  assert.equal(specials.cards.length, 1); assert.equal(specials.cards[0].definitionId, 17000000);
+  const none = await targets.loadRatingTargets({ ...f, position: "ST" }); assert.equal(none.cards.length, 0);
+  assert.equal(targets.usesRatingRotation({ ...f, player: { id: 9001 } }), false);
+  assert.equal(targets.usesRatingRotation({ ...f, definitionId: 9001 }), false);
+  assert.equal(targets.usesRatingRotation({ ...f, tradeMode: "bidOnly" }), false);
+});
+
+test("rating targets rotate, wrap and reset after criteria changes without mutating saved filters", async () => {
+  const e = env({ "app/services/datasource/playerCards.js": { loadPlayerCardCatalog: async () =>
+    [ratingCard(9001, { name: "Alpha" }), ratingCard(9002, { name: "Beta" }), ratingCard(9003, { rating: 82 })] } });
+  const targets = e.load("app/core/ratingTargets.js");
+  const f = e.filters.addFilter({ minRating: 81, maxRating: 81, level: "gold", maxBuy: 700 });
+  const ctx = {};
+  assert.equal((await targets.selectRatingTarget(ctx, f)).filter.definitionId, 9001);
+  assert.equal((await targets.selectRatingTarget(ctx, f)).filter.definitionId, 9002);
+  assert.equal((await targets.selectRatingTarget(ctx, f)).filter.definitionId, 9001);
+  assert.equal(e.filters.getActiveFilter().definitionId, 0); assert.equal(e.filters.getActiveFilter().player, null);
+  const changed = await targets.selectRatingTarget(ctx, { ...f, minRating: 82, maxRating: 82 });
+  assert.equal(changed.filter.definitionId, 9003); assert.equal(changed.total, 1);
+  const cancelled = await targets.selectRatingTarget({ token: { cancelled: true } }, f);
+  assert.equal(cancelled.cancelled, true);
+});
+
+test("rating cycles and test searches target one exact version per search and enforce the group's prices", async () => {
+  const e = tradingEnv({ "app/services/datasource/playerCards.js": { loadPlayerCardCatalog: async () => [ratingCard(9001), ratingCard(9002)] } });
+  readyForTrading(e); e.settings.buy.skipGk = false;
+  const f = e.filters.addFilter({ minRating: 81, maxRating: 81, level: "gold", maxBuy: 700, buyBelow: true });
+  e.m.results = [Object.assign(bidPlayer(e, 1, { buyNowPrice: 650 }), { definitionId: 9001 }),
+    Object.assign(bidPlayer(e, 2, { buyNowPrice: 650 }), { definitionId: 9002 }),
+    Object.assign(bidPlayer(e, 3, { buyNowPrice: 700 }), { definitionId: 9001 })];
+  const ctx = e.ctx();
+  await e.internals.snipeCycle(ctx, f, 650, e.settings);
+  await e.internals.snipeCycle(ctx, f, 650, e.settings);
+  await e.internals.snipeCycle(ctx, f, 650, e.settings);
+  assert.deepEqual(e.calls.searches.map((c) => Array.from(c.defId)), [[9001], [9002], [9001]]);
+  assert.ok(e.calls.searches.every((c) => c.maxBuy === 650 && !c.maskedDefId));
+  assert.equal(e.calls.bids.length, 2); assert.ok(e.calls.bids.every((entry) => entry.price === 650));
+  const preview1 = await e.internals.runPreviewSearch(f, e.ctx().token);
+  const preview2 = await e.internals.runPreviewSearch(f, e.ctx().token);
+  assert.equal(preview1.ratingTarget.definitionId, 9001); assert.equal(preview2.ratingTarget.definitionId, 9002);
+  assert.equal(preview2.ratingTargetCount, 2); assert.equal(e.calls.bids.length, 2, "test searches never purchase");
+});
+
+test("refreshing a rating list preserves progress so long lists are not restarted before completion", async () => {
+  let cards = [ratingCard(9001, { name: "Alpha" }), ratingCard(9002, { name: "Beta" })];
+  const e = env({ "app/services/datasource/playerCards.js": { loadPlayerCardCatalog: async () => cards } });
+  let clock = 10000; e.context.catalogClock = () => clock; vm.runInContext("Date.now = () => catalogClock()", e.context);
+  const targets = e.load("app/core/ratingTargets.js");
+  const f = e.filters.normalizeFilter({ minRating: 81, maxRating: 81, level: "gold" });
+  const ctx = {};
+  assert.equal((await targets.selectRatingTarget(ctx, f)).card.definitionId, 9001);
+  cards = [ratingCard(9000, { name: "0 New player" }), ...cards]; clock += 1000;
+  await targets.loadRatingTargets(f, { force: true });
+  assert.equal((await targets.selectRatingTarget(ctx, f)).card.definitionId, 9002);
+  assert.equal((await targets.selectRatingTarget(ctx, f)).card.definitionId, 9000);
+});
+
+test("missing, incomplete or empty rating lists never issue a broad EA search", async () => {
+  for (const failure of [true, false]) {
+    const e = tradingEnv({ "app/services/datasource/playerCards.js": { loadPlayerCardCatalog: async () => {
+      if (failure) throw new Error("Incomplete catalogue"); return [];
+    } } });
+    readyForTrading(e);
+    const f = e.filters.normalizeFilter({ minRating: 81, maxRating: 81, level: "gold", maxBuy: 700 });
+    await e.internals.snipeCycle(e.ctx(), f, 700, e.settings);
+    const result = await e.internals.runPreviewSearch(f, e.ctx().token);
+    assert.equal(result.ok, false); assert.equal(e.calls.searches.length, 0); assert.equal(e.calls.bids.length, 0);
+  }
+});
+
+test("changing a rating while its card list loads prevents searching the old selection", async () => {
+  let finish;
+  const e = tradingEnv({ "app/services/datasource/playerCards.js": { loadPlayerCardCatalog: () => new Promise((resolve) => { finish = resolve; }) } });
+  const f = e.filters.addFilter({ minRating: 81, maxRating: 81, level: "gold", maxBuy: 700 });
+  const cycle = e.internals.snipeCycle(e.ctx(), f, 700, e.settings);
+  e.filters.updateFilter(f.id, { minRating: 82, maxRating: 82 });
+  finish([ratingCard(9001)]); await cycle;
+  assert.equal(e.calls.searches.length, 0); assert.equal(e.calls.bids.length, 0);
+});
+
+test("invalid persisted card identities are reloaded rather than producing unrestricted searches", async () => {
+  const e = env(); const targets = e.load("app/core/ratingTargets.js");
+  const f = e.filters.normalizeFilter({ minRating: 81, maxRating: 81, level: "gold", maxBuy: 700 });
+  const key = targets.ratingTargetsKey(f);
+  const e2 = env();
+  e2.context.window.localStorage.setItem("mb5.ratingCardLists", JSON.stringify({ [key]: { status: "ready", loadedAt: Date.now(), cards: [ratingCard(0)] } }));
+  const record = await e2.load("app/core/ratingTargets.js").loadRatingTargets(f);
+  assert.equal(record.status, "ready"); assert.equal(record.cards[0].definitionId, 9001);
+});
+
+test("public card catalogue paginates with real rating parameters and rejects truncated or wrong-edition data", async () => {
+  const requests = [];
+  const rawCard = (id, patch = {}) => ({ eaId: id, basePlayerEaId: id, cardName: `Player ${id}`, game: "27", overall: 81,
+    isSpecial: false, rarityEaId: 0, position: "CM", ...patch });
+  let pages = [{ data: [rawCard(9001)], currentPage: 1, next: 2, total: 2 },
+    { data: [rawCard(9002)], currentPage: 2, next: null, total: 2 }];
+  const e = env({ "app/services/externalRequest.js": { sendExternalRequest: (opts) => {
+    requests.push(opts.url); const page = Number(new URL(opts.url).searchParams.get("page"));
+    opts.onload({ status: 200, responseText: JSON.stringify(pages[page - 1]) });
+  } } });
+  e.mocks.delete(path.resolve(e.root, "app/services/datasource/playerCards.js"));
+  const source = e.load("app/services/datasource/playerCards.js");
+  const cards = await source.loadPlayerCardCatalog({ minRating: 81, maxRating: 81, year: "27" });
+  assert.equal(cards.length, 2); assert.ok(requests.every((url) => url.includes("overall__gte=81&overall__lte=81")));
+  assert.ok(requests.every((url) => !/price/.test(url)), "only card metadata is requested");
+  pages = [{ data: [rawCard(9001)], currentPage: 1, next: null, total: 2 }];
+  await assert.rejects(source.loadPlayerCardCatalog({ minRating: 81, maxRating: 81 }), /full list/);
+  pages = [{ data: [rawCard(9001, { game: "26" })], currentPage: 1, next: null, total: 1 }];
+  await assert.rejects(source.loadPlayerCardCatalog({ minRating: 81, maxRating: 81 }), /version, rating or type/);
+  pages = [{ data: [rawCard(9001, { overall: 82 })], currentPage: 1, next: null, total: 1 }];
+  await assert.rejects(source.loadPlayerCardCatalog({ minRating: 81, maxRating: 81 }), /rating filter/);
+  assert.equal(source.normalizeCatalogCard(rawCard(1, { isSbc: true }), "27"), null);
+  assert.throws(() => source.normalizeCatalogCard(rawCard(1, { isSpecial: undefined }), "27"), /type data/);
+});
 
 test("bid-only filters persist exact amount and time, reject incomplete targets, and leave old filters unchanged", () => {
   const e = tradingEnv(); readyForTrading(e);
