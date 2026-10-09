@@ -21,6 +21,12 @@ const dp = {
 const observable = (response) => ({ observe(scope, fn) { setTimeout(() => fn(this, response), 0); }, unobserve() {} });
 const bidOnlyPreview = new URLSearchParams(window.location.search).has("bid-only");
 const ratingPreview = new URLSearchParams(window.location.search).has("player-ratings");
+const transferPreview = new URLSearchParams(window.location.search).has("fixed-transfers");
+const transferItems = [1, 2, 3].map((id) => ({ id, definitionId: 9000 + id, type: "player", rating: 81,
+  tradable: true, isPlayer: () => true, getStaticData: () => ({ name: `Sample available card ${id}` }),
+  _auction: null, getAuctionData() { return this._auction; },
+  hasPriceLimits: () => true, getPriceLimits: () => ({ minimum: 150, maximum: 10000 }),
+}));
 if (ratingPreview) {
   window.GM_xmlhttpRequest = (opts) => {
     const cards = [9001, 9002, 9003].map((eaId, index) => ({ eaId, basePlayerEaId: eaId, cardName: `Sample gold player ${index + 1}`,
@@ -50,9 +56,13 @@ const fixturePage = {
       (criteria.defId || []).map((definitionId) => ({ ...samplePlayers[0], definitionId, rareflag: 0,
         getStaticData: () => ({ name: `Sample gold player ${definitionId - 9000}` }),
         getAuctionData: () => ({ tradeId: `rating-${definitionId}`, expires: 60, buyNowPrice: 650, startingBid: 150 }) })) : [sampleItem] } }),
-    requestTransferItems: () => observable({ success: true, response: { items: [] } }),
+    requestTransferItems: () => observable({ success: true, response: { items: transferPreview ? transferItems : [] } }),
     bid() { throw new Error("Trading is disabled in this synthetic fixture"); },
-    list() { throw new Error("Trading is disabled in this synthetic fixture"); },
+    list(item, start, buyNow) {
+      if (!transferPreview) throw new Error("Trading is disabled in this synthetic fixture");
+      item._auction = { tradeId: `fixture-${item.id}`, expires: 3600, startingBid: start, buyNowPrice: buyNow, isSelling: () => true };
+      return observable({ success: true });
+    },
   } },
 };
 const delayedProviders = new URLSearchParams(window.location.search).has("late-providers");

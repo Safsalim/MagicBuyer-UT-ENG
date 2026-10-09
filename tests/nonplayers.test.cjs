@@ -645,6 +645,58 @@ test("bulk preview matches selected criteria and skips active, sold, untradeable
   assert.equal(untargeted.ok, false); assert.equal(untargeted.rows.length, 0);
 });
 
+test("fixed transfer listing lists every available item at 1300/1200, independent of target and reference settings", async () => {
+  const e = tradingEnv(); const bulk = e.load("app/core/bulkSell.js");
+  e.settings.sell.duration = "3H"; e.settings.sell.priceMode = "futbin"; e.settings.sell.minProfit = 99999;
+  e.filters.addFilter({ definitionId: 123, sellMode: "fixed", sellPrice: 5000 });
+  const available = [e.item(1, 0, { type: "player", _auction: null }), e.item(2, 0, { _auction: { tradeId: "0", expires: 0 } }),
+    e.item(3, 0, { type: "training", subtype: 251, _auction: null })];
+  e.m.transferItems = [...available, e.item(4), e.item(5, 0, { _auction: { tradeId: "5", isSold: () => true } }),
+    e.item(6, 0, { _auction: { tradeId: "6", isExpired: () => true } }), e.item(7, 0, { _auction: null, untradeable: true })];
+  const report = await bulk.listAvailableAtFixedPrice({ price: 1300, token: e.ctx().token });
+  assert.equal(report.total, 3); assert.equal(report.listed, 3); assert.equal(report.skipped, 0);
+  assert.deepEqual(e.calls.listings.map((row) => [row.item.id, row.start, row.price, row.duration]), [[1, 1200, 1300, 10800], [2, 1200, 1300, 10800], [3, 1200, 1300, 10800]]);
+  assert.equal(e.filters.getActiveFilter().sellPrice, 5000);
+});
+
+test("fixed listing preserves exact prices, skips unavailable limits and changed auctions, and rejects invalid tiers", async () => {
+  const e = tradingEnv(); const bulk = e.load("app/core/bulkSell.js");
+  for (const price of [0, 150, 200, 1301, 10100, 10250, 50000, 15000001]) assert.equal(bulk.fixedTransferPrices(price).valid, false, String(price));
+  for (const price of [250, 700, 1000, 1300, 10000]) assert.equal(bulk.fixedTransferPrices(price).valid, true, String(price));
+  let reads = 0;
+  const items = [1, 2, 3, 4, 5].map((id) => e.item(id, 0, { _auction: null }));
+  e.m.fetchTransferList = async () => {
+    reads += 1;
+    if (reads > 1) items[0]._auction = { tradeId: "1", expires: 1000 };
+    return { ok: true, items };
+  };
+  e.m.fetchPriceLimits = async (item) => item.id === 2 ? { min: 1250, max: 2000 } : item.id === 3 ? { min: 150, max: 1200 } : item.id === 4 ? null : { min: 150, max: 2000 };
+  assert.match((await bulk.listAvailableAtFixedPrice({ price: 10250 })).stopped, /valid EA/);
+  assert.equal(reads, 0);
+  const report = await bulk.listAvailableAtFixedPrice({ price: 1300 });
+  assert.equal(report.listed, 1); assert.equal(report.skipped, 4);
+  assert.equal(e.calls.listings[0].item.id, 5); assert.equal(e.calls.listings[0].start, 1200);
+});
+
+test("fixed transfer listing stops on cancellation or EA rate limits and reports an empty list", async () => {
+  for (const mode of ["cancel", "rate"]) {
+    const e = tradingEnv(); const bulk = e.load("app/core/bulkSell.js"); const token = e.ctx().token;
+    e.m.transferItems = [1, 2].map((id) => e.item(id, 0, { _auction: null }));
+    if (mode === "cancel") e.m.fetchPriceLimits = async () => { token.cancel(); return { min: 150, max: 2000 }; };
+    else e.m.listOnMarket = async (item) => { e.calls.listings.push({ item }); return { ok: false, error: { kind: "rate", label: "EA rate limit" } }; };
+    const report = await bulk.listAvailableAtFixedPrice({ price: 1300, token });
+    assert.equal(e.calls.listings.length, mode === "rate" ? 1 : 0);
+    assert.equal(report.listed, 0); assert.match(report.stopped, mode === "rate" ? /EA rate/ : /stop requested/);
+  }
+  const e = tradingEnv();
+  const report = await e.load("app/core/bulkSell.js").listAvailableAtFixedPrice({ price: 1300 });
+  assert.equal(report.total, 0); assert.equal(report.listed, 0); assert.equal(report.stopped, "");
+  const fields = e.load("app/ui/fields.js");
+  fields.testWriteBound("s:transfer.listPrice", 1300);
+  assert.equal(e.load("app/core/settings.js").getSettings().transfer.listPrice, 1300);
+  assert.match(e.load("app/ui/pages/settingsPages.js").transferPageHtml(), /List all available cards/);
+});
+
 test("bulk execution rechecks active state, stale references, cancellation and changed EA limits", async () => {
   const e = tradingEnv(); const bulk = e.load("app/core/bulkSell.js"); const token = e.ctx().token;
   const available = e.item(1, 0, { _auction: null }); e.m.transferItems = [available];

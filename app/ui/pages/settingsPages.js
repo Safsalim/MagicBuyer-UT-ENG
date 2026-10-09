@@ -1,4 +1,4 @@
-import { previewMatchingItems, listMatchingPreview } from "../../core/bulkSell";
+import { fixedTransferPrices, listAvailableAtFixedPrice, previewMatchingItems, listMatchingPreview } from "../../core/bulkSell";
 import { getActiveFilter } from "../../core/filters";
 import { setRequestToken } from "../../core/requestQueue";
 import { isRunning } from "../../core/engine";
@@ -192,6 +192,17 @@ export const transferPageHtml = () => `
       <button type="button" class="mb-btn mb-btn-ghost mb-btn-sm" data-transfer-action="clear">Clear sold cards</button>
     </div>`)}
   ${section(
+    "List all available cards",
+    grid(priceField({ bind: "s:transfer.listPrice", label: "Buy Now price for all available cards", placeholder: "e.g. 1300", wide: true,
+      hint: "Starting bid is always 100 coins lower. Uses the Sell tab's listing duration." })) +
+    `<p class="mb-hint">Lists every tradeable Available item, regardless of the Target filter. Active, sold and unsold auctions are skipped. Cards outside EA price limits are skipped.</p>
+     <div class="mb-row mb-fixed-list-actions">
+       <button type="button" class="mb-btn mb-btn-primary" data-transfer-action="fixed-list">List all available cards</button>
+       <button type="button" class="mb-btn mb-btn-danger" data-transfer-action="fixed-stop" hidden>Stop</button>
+     </div>
+     <div data-transfer-fixed role="status" aria-live="polite"></div>`
+  )}
+  ${section(
     "List matching items",
     `<p class="mb-hint">Preview available and expired items matching the selected Target filter. Prices follow that filter and the Sell tab. Active, sold, untradeable and unsupported items are skipped.</p>
      <div class="mb-row" style="margin-top:8px">
@@ -292,7 +303,7 @@ export const bindSettingsPages = (body, refreshAll) => {
     }
     const action = target.closest("[data-transfer-action]");
     if (action) {
-      if (action.dataset.transferAction === "futbin-stop") {
+      if (["futbin-stop", "fixed-stop"].includes(action.dataset.transferAction)) {
         cancelTask();
         return;
       }
@@ -302,6 +313,14 @@ export const bindSettingsPages = (body, refreshAll) => {
       }
       if (["matching-preview", "matching-list"].includes(action.dataset.transferAction)) {
         await runMatchingListing(body, action.dataset.transferAction === "matching-list");
+        return;
+      }
+      if (action.dataset.transferAction === "fixed-list") {
+        await runFixedListing(body);
+        return;
+      }
+      if (currentTask() && action.dataset.transferAction !== "refresh") {
+        log.warn("Another manual task is in progress. Stop it before changing the transfer list.");
         return;
       }
       action.disabled = true;
@@ -334,6 +353,40 @@ export const bindSettingsPages = (body, refreshAll) => {
 };
 
 let matchingPreview = null;
+const runFixedListing = async (body) => {
+  const out = qs(body, "[data-transfer-fixed]");
+  const startBtn = qs(body, '[data-transfer-action="fixed-list"]');
+  const stopBtn = qs(body, '[data-transfer-action="fixed-stop"]');
+  const price = getSettings().transfer.listPrice;
+  const prices = fixedTransferPrices(price);
+  if (!prices.valid) { out.innerHTML = `<p class="mb-note is-warn">${escapeHtml(prices.reason)}</p>`; return; }
+  const task = beginTask("Fixed transfer listing");
+  if (!task) { out.innerHTML = `<p class="mb-note is-warn">Another task is in progress. Stop it before listing.</p>`; return; }
+  startBtn.disabled = true;
+  stopBtn.hidden = false;
+  setRequestToken(task.token);
+  const paint = (report) => {
+    const summary = `${report.listed} listed · ${report.skipped} skipped · ${report.total} available` +
+      (report.current ? ` · ${report.current}` : "") + (report.stopped ? ` · stopped: ${report.stopped}` : "");
+    out.innerHTML = `<p class="mb-note">Buy Now ${formatCoins(prices.buyNow)} · starting bid ${formatCoins(prices.start)}<br>${escapeHtml(summary)}</p>`;
+  };
+  try {
+    out.innerHTML = `<p class="mb-note">Loading available cards…</p>`;
+    const report = await listAvailableAtFixedPrice({ price, token: task.token, onProgress: paint });
+    paint(report);
+    log.info(`Fixed transfer listing: ${report.listed} listed, ${report.skipped} skipped${report.stopped ? `; stopped: ${report.stopped}` : ""}.`);
+  } catch (e) {
+    out.innerHTML = `<p class="mb-note is-warn">${escapeHtml(e.message || e)}</p>`;
+  } finally {
+    endTask(task);
+    setRequestToken(null);
+    startBtn.disabled = false;
+    stopBtn.hidden = true;
+    await runTransferAction("refresh");
+    setHtml(qs(body, "[data-transfer-stats]"), transferStatsHtml());
+  }
+};
+
 const runMatchingListing = async (body, execute) => {
   const out = qs(body, "[data-transfer-futbin]");
   const startBtn = qs(body, '[data-transfer-action="matching-preview"]');
